@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+secrets/
+paper/
+backups/
+backup-*/
+node_modules/
+*.log
+state.json
+status.json
+*.bak
+live-verification.json

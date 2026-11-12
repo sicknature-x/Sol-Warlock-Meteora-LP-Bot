@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <title>Sol Warlock v1.7 — Dry Run / Live</title>
+  <link rel="stylesheet" href="/app.css?v=20261112-tvldrop">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1>Sol Warlock <span class="mode">v1.7</span></h1>
+      <p class="badge">SOLANA LP TERMINAL <span class="mode">DRY RUN</span></p>
+    </div>
+  </header>
+  <nav class="tabs" role="tablist">
+    <button type="button" data-tab="status" class="tab active" role="tab">Status</button>
+    <button type="button" data-tab="settings" class="tab" role="tab">Settings</button>
+    <button type="button" data-tab="wallet" class="tab" role="tab">Wallet</button>
+  </nav>
+  <main>
+    <p id="banner" class="banner hidden"></p>
+
+    <section id="panel-status" class="panel">
+      <div id="strategy-status" class="card strategy-strip" aria-label="Strategi paper">Memuat strategi…</div>
+      <div id="status-body" class="card summary">Memuat portofolio…</div>
+      <div class="btn-row position-subtabs" role="tablist" aria-label="Panel portofolio paper"><button type="button" class="btn active" data-position-view="open" role="tab" aria-selected="true">Posisi open</button><button type="button" class="btn" data-position-view="history" role="tab" aria-selected="false">History</button><button type="button" class="btn" data-position-view="screening" role="tab" aria-selected="false">Screening</button><button type="button" class="btn" data-position-view="activity" role="tab" aria-selected="false">Aktivitas</button></div>
+      <div id="open-view">
+      <div class="section-head"><h2>Posisi terbuka <span id="position-count" class="count">0</span></h2><span class="live-dot" id="sync-state">Menghubungkan</span></div>
+      <div id="positions"></div>
+      </div><div id="history-view" class="hidden">
+      <div class="section-head"><h2>History posisi · 24 jam</h2></div><p id="archive-note" class="meta"></p>
+      <label class="toggle"><input id="hide-dust" type="checkbox"> Sembunyiin PnL receh <span class="meta">&lt; $0.10</span></label>
+      <div id="closed"></div></div>
+      <div id="screening-view" class="hidden"><div class="section-head"><h2>Kandidat terdekat</h2><span class="meta">fee/TVL · 30m</span></div>
+      <div id="candidates" class="card"></div></div>
+      <div id="activity-view" class="hidden"><div class="section-head"><h2>Aktivitas bot</h2><span class="meta">WIB · 50 terbaru</span></div>
+      <div id="activity" class="card feed"></div></div>
+
+      <p id="window-info" class="meta footer-note"></p>
+    </section>
+
+    <section id="panel-settings" class="panel hidden">
+      <div id="strategy-settings" class="card strategy-strip" aria-label="Strategi paper">Memuat strategi…</div>
+      <form id="settings-form" class="card"></form>
+      <div class="btn-row sticky">
+        <button type="button" id="btn-reset" class="btn ghost">Reset ke default</button>
+        <button type="submit" form="settings-form" id="btn-save" class="btn primary">Simpan</button>
+      </div>
+    </section>
+
+    <section id="panel-wallet" class="panel hidden">
+      <div class="btn-row position-subtabs" role="tablist" aria-label="Menu wallet"><button type="button" class="btn active" data-wallet-view="key" role="tab" aria-selected="true">Wallet</button><button type="button" class="btn" data-wallet-view="pnlcal" role="tab" aria-selected="false">PnL Calendar</button><button type="button" class="btn" data-wallet-view="live" role="tab" aria-selected="false">Live</button></div>
+      <div id="wallet-live-view" class="hidden">
+      <div class="card actions-row">
+        <div>
+          <div class="k">Dry run</div>
+          <div id="pause-state">—</div>
+        </div>
+        <div class="btn-row">
+          <button type="button" id="btn-pause" class="btn danger">Pause</button>
+          <button type="button" id="btn-resume" class="btn good">Resume</button>
+        </div>
+      </div>
+      <form id="funding-form" class="card hidden">
+        <h3>Tambah modal (dry run)</h3>
+        <p id="funding-stats" class="meta"></p>
+        <p class="meta">Virtual USDC saja, bukan transfer uang. Modal disetor tidak dihitung sebagai profit. Tidak mengubah posisi yang sedang terbuka.</p>
+        <label for="funding-amount">Jumlah USDC (1–10000)</label>
+        <input id="funding-amount" type="number" min="1" max="10000" step="0.000001" required placeholder="100">
+        <button id="btn-funding" type="submit" class="btn primary">Konfirmasi tambah modal</button>
+        <p id="funding-result" class="meta" aria-live="polite"></p>
+      </form>
+      <form id="modal-form" class="card hidden">
+        <h3>Edit modal dry run</h3>
+        <p id="modal-stats" class="meta"></p>
+        <p class="meta">Mulai dry run baru dari awal dengan modal ini. Dry run sekarang disimpan (tidak dihapus). Semua posisi harus sudah ditutup. SL blacklist dan settings tetap.</p>
+        <label for="modal-amount">Modal baru USDC (minimal 1)</label>
+        <input id="modal-amount" type="number" min="0" step="0.000001" required value="0">
+        <button id="btn-modal" type="submit" class="btn danger">Edit modal &amp; mulai ulang</button>
+        <p id="modal-result" class="meta" aria-live="polite"></p>
+      </form>
+      <div class="card" id="runs-list"></div>
+      <div class="card" id="live-status">Memuat…</div>
+      <div class="card" id="live-arm-box">
+        <p class="meta">Live jalan kalau ada key dan saldo wallet cukup. Tekan <strong>Live ON</strong>, lalu konfirmasi. Kalau saldo kurang, live menolak jalan dan dry run tetap berjalan. Hanya Tuan.</p>
+        <button type="button" id="btn-arm" class="btn danger">Live ON</button>
+        <div id="live-confirm" class="hidden">
+          <label for="live-phrase">Ketik LIVE untuk konfirmasi</label>
+          <input id="live-phrase" type="text" autocomplete="off" maxlength="8" placeholder="LIVE">
+          <p id="live-timer" class="meta"></p>
+          <button type="button" id="btn-go-live" class="btn danger">2. Go Live</button>
+        </div>
+      </div>
+      <div class="card">
+        <p class="meta">Live OFF: tutup semua posisi lalu matikan live, atau hanya stop buka posisi baru (posisi yang kebuka dibiarkan sampai TP/emergency/12h).</p>
+        <div class="btn-row">
+          <button type="button" id="btn-stop-close" class="btn danger">Live OFF (tutup posisi)</button>
+          <button type="button" id="btn-stop-nonew" class="btn ghost">Stop buka posisi baru</button>
+        </div>
+      </div>
+      </div>
+      <div id="wallet-pnlcal-view" class="hidden"><div id="pnlcal" class="card">Memuat PnL calendar…</div></div>
+      <div id="wallet-key-view">
+      <div class="card">
+        <div class="k">Alamat (public saja)</div>
+        <p id="wallet-address" class="mono">Belum ada key</p>
+        <p id="wallet-updated" class="meta"></p>
+      </div>
+      <form id="wallet-form" class="card">
+        <label for="wallet-secret">Private key (disembunyikan, write-only)</label>
+        <p class="meta">Tempel base58 atau JSON array. Tidak pernah ditampilkan lagi, tidak dikirim ke Telegram, tidak masuk log.</p>
+        <input id="wallet-secret" name="secret" type="password" autocomplete="new-password" spellcheck="false" placeholder="Tempel key di sini">
+        <div class="btn-row">
+          <button type="submit" id="btn-save-key" class="btn primary">Simpan / Ganti key</button>
+          <button type="button" id="btn-del-key" class="btn danger">Hapus key</button>
+        </div>
+      </form>
+      </div>
+    </section>
+
+  </main>
+  <dialog id="trade-modal"><div class="section-head"><h2>Detail posisi</h2><button id="close-modal" class="btn ghost">Tutup ✕</button></div><div id="trade-detail"></div></dialog>
+  <dialog id="cal-day-modal"><div class="section-head"><h2 id="cal-day-title">Rincian hari</h2><button id="cal-day-close" type="button" class="btn ghost">Tutup ✕</button></div><p class="meta cal-day-sub">Reset 07:00 WIB</p><div id="cal-day-body"></div></dialog>
+  <!-- v=20261112-tvldrop -->
+  <script src="/app.js?v=20261112-tvldrop"></script>
+</body>
+</html>
