@@ -17,5 +17,10 @@
     "@solana/web3.js": "^1.99.0",
     "bn.js": "^5.2.5",
     "bs58": "^6.0.0"
+  },
+  "overrides": {
+    "@coral-xyz/anchor": {
+      "toml": "5.0.1"
+    }
   }
 }
