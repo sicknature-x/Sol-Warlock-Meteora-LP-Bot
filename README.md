@@ -1,4 +1,4 @@
-# 🧙 Sol Warlock v1.7: Bot LP Solana (Meteora DLMM)
+# 🧙 Sol Warlock v1.8: Bot LP Solana (Meteora DLMM)
 
 Bot LP otomatis untuk Meteora DLMM. Default-nya mode PAPER (simulasi, tanpa uang asli), dikontrol lewat Telegram Mini App. Tidak pakai AI/LLM.
 
