@@ -13,7 +13,45 @@ const commands=require('../paper-commands');
 const screenRefresh=require('../paper-screen-refresh');
 const walletStore = require('../wallet-store');
 const liveControl = require('../live-control');
+const tokenRent = require('../token-rent');
 // Tuan rule: live must equal dry run. Go Live (arm/start) is refused while the parity check finds any difference (fails closed if the check itself errors).
+// ---- token account rent (read-only scan + guarded claim). Never automatic; the claim only runs from an authenticated POST with an explicit phrase.
+// Mints the live bot still holds positions in (any side): their token accounts are never closed, even when momentarily empty.
+function liveProtectedMints(opts) {
+  if (opts.protectedMintsFn) return new Set(opts.protectedMintsFn());
+  const set = new Set();
+  const live = (opts.liveStatusFn || liveControl.pm2LiveStatus)();
+  let st = null;
+  try { st = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'state.json'), 'utf8')); }
+  catch (e) { if (e.code !== 'ENOENT') throw new Error('state live tidak terbaca, claim ditunda'); }
+  if (st) for (const p of require('../live-positions').list(st)) { if (p && p.mintX) set.add(p.mintX); if (p && p.mintY) set.add(p.mintY); }
+  if (!st && live.running) throw new Error('state live tidak ditemukan saat live ON, claim ditunda');
+  return set;
+}
+async function rentScan(opts, secretsDir) {
+  const meta = walletStore.readEnvelopeMeta(secretsDir);
+  if (!meta.hasKey || !meta.publicAddress) return { ok: false, status: 400, error: 'key not stored' };
+  if (opts.rentScanFn) return { ok: true, ...(await opts.rentScanFn(meta.publicAddress)) };
+  const web3 = require('@solana/web3.js');
+  const conn = new web3.Connection(opts.rpc || require('../rpc-config').url(), 'confirmed');
+  return { ok: true, ...(await tokenRent.scan({ conn, owner: meta.publicAddress, PublicKey: web3.PublicKey, protectedMints: liveProtectedMints(opts) })) };
+}
+async function rentClaim(opts, secretsDir) {
+  if (opts.rentClaimFn) return opts.rentClaimFn();
+  const web3 = require('@solana/web3.js'), spl = require('@solana/spl-token');
+  const keypair = walletStore.loadKeypair(secretsDir);
+  const conn = new web3.Connection(opts.rpc || require('../rpc-config').url(), 'confirmed');
+  const prep = async tx => { tx.feePayer = keypair.publicKey; tx.recentBlockhash = (await conn.getLatestBlockhash('confirmed')).blockhash; return tx; };
+  return tokenRent.claim({
+    conn, keypair, web3, spl, protectedMints: liveProtectedMints(opts),
+    simulate: async tx => { await prep(tx); const r = await conn.simulateTransaction(tx); return { err: r.value && r.value.err }; },
+    send: async tx => { const bh = await conn.getLatestBlockhash('confirmed'); tx.feePayer = keypair.publicKey; tx.recentBlockhash = bh.blockhash; tx.sign(keypair);
+      const sig = await conn.sendRawTransaction(tx.serialize(), { skipPreflight: false, maxRetries: 3 });
+      const c = await conn.confirmTransaction({ signature: sig, blockhash: bh.blockhash, lastValidBlockHeight: bh.lastValidBlockHeight }, 'confirmed');
+      if (c.value && c.value.err) throw new Error('tx error ' + JSON.stringify(c.value.err)); return sig; },
+  });
+}
+
 function liveParityDifferences() { try { return require('../parity-check').analyse().debt; } catch (e) { return ['parity-check error: ' + e.message]; } }
 const telegram = require('../telegram-notify');
 const ROOT = process.env.LP_BOT_DIR || '/workspace/lp-bot';
@@ -229,10 +267,17 @@ function createApp(opts = {}) {
       const envFile = require('../env-config').read(path.join(__dirname, '..'));
       return send(res, 200, { ok: true, ...cal.build(paperDir), mode: cal.mode({ ...process.env, ...envFile }, liveControl.isStopPresent(stopPath)) });
     }
-    if (req.method === 'GET' && (pathname === '/api/settings' || pathname === '/api/status' || pathname === '/api/wallet' || pathname === '/api/live')) {
+    if (req.method === 'GET' && (pathname === '/api/settings' || pathname === '/api/status' || pathname === '/api/wallet' || pathname === '/api/live' || pathname === '/api/wallet/rent')) {
       const gate = authInit(req, { initData: url.searchParams.get('initData') || req.headers['x-telegram-init-data'] });
       if (!gate.ok) return send(res, gate.status, { ok: false, error: gate.error, reason: gate.reason, locked: locked() });
       const nonce = csrf.issue(gate.userId);
+      if (pathname === '/api/wallet/rent') {
+        try {
+          const r = await rentScan(opts, secretsDir);
+          if (!r.ok) return send(res, r.status || 400, { ok: false, error: r.error, csrf: nonce });
+          return send(res, 200, { ...r, csrf: nonce, accounts: undefined, sample: (r.accounts || []).slice(0, 5).map(a => ({ mint: a.mint, sol: a.lamports / 1e9 })) });
+        } catch (e) { return send(res, 502, { ok: false, error: 'scan gagal: ' + String(e.message || e).slice(0, 120), csrf: nonce }); }
+      }
       if (pathname === '/api/wallet') {
         const meta = walletStore.readEnvelopeMeta(secretsDir);
         return send(res, 200, { ok: true, csrf: nonce, hasKey: meta.hasKey, publicAddress: meta.publicAddress, updatedWib: meta.updatedWib });
@@ -276,7 +321,7 @@ function createApp(opts = {}) {
     const writeRoutes = new Set([
       '/api/settings', '/api/settings/reset', '/api/pause', '/api/resume', '/api/sl-blacklist/remove',
       '/api/paper/capital/deposit', '/api/paper/capital/new-run', '/api/paper/open', '/api/paper/close', '/api/paper/scan',
-      '/api/wallet', '/api/wallet/delete',
+      '/api/wallet', '/api/wallet/delete', '/api/wallet/rent/claim',
       '/api/live/arm', '/api/live/start', '/api/live/stop',
     ]);
     if (!writeRoutes.has(pathname)) return send(res, 404, { ok: false, error: 'not found' });
@@ -384,6 +429,14 @@ function createApp(opts = {}) {
         notify('key-saved', { publicAddress: saved.publicAddress, updatedWib: saved.updatedWib }).catch(() => {});
         return send(res, 200, { ok: true, hasKey: true, publicAddress: saved.publicAddress, updatedWib: saved.updatedWib, csrf: csrf.issue(gate.userId) });
       }
+      if (pathname === '/api/wallet/rent/claim') {
+        if (String(body && body.confirm || '') !== 'CLAIM') return send(res, 400, { ok: false, error: 'type CLAIM to confirm' });
+        if (!walletStore.readEnvelopeMeta(secretsDir).hasKey) return send(res, 400, { ok: false, error: 'key not stored' });
+        audit(`uid=${gate.userId} action=wallet-rent-claim-start`);
+        let r; try { r = await rentClaim(opts, secretsDir); } catch (e) { r = { ok: false, error: String(e.message || e).slice(0, 160), closed: 0 }; }
+        audit(`uid=${gate.userId} action=wallet-rent-claim-done ok=${!!r.ok} closed=${r.closed || 0} sol=${r.reclaimedSol || 0}${r.error ? ' error=' + String(r.error).slice(0, 80) : ''}`);
+        return send(res, r.ok ? 200 : 502, { ...r, csrf: csrf.issue(gate.userId) });
+      }
       if (pathname === '/api/wallet/delete') {
         walletStore.deleteKey(secretsDir);
         audit(`uid=${gate.userId} action=wallet-key-deleted`);
@@ -392,7 +445,7 @@ function createApp(opts = {}) {
       }
 
       if (pathname === '/api/live/arm') {
-        { const par = liveParityDifferences(); if (par.length) return send(res, 400, { ok: false, error: 'live belum sama dengan dry run; Go Live ditolak', differences: par }); }
+        { const par = (opts.parityFn || liveParityDifferences)(); if (par.length) return send(res, 400, { ok: false, error: 'live belum sama dengan dry run; Go Live ditolak', differences: par }); }
         const snap = await liveControl.liveSnapshot({
           secretsDir, stopPath, noNewPath,
           getBalances: opts.getBalances,
@@ -410,7 +463,7 @@ function createApp(opts = {}) {
       }
 
       if (pathname === '/api/live/start') {
-        { const par = liveParityDifferences(); if (par.length) return send(res, 400, { ok: false, error: 'live belum sama dengan dry run; Go Live ditolak', differences: par }); }
+        { const par = (opts.parityFn || liveParityDifferences)(); if (par.length) return send(res, 400, { ok: false, error: 'live belum sama dengan dry run; Go Live ditolak', differences: par }); }
         const phrase = body && String(body.confirm || body.phrase || '');
         if (phrase !== 'LIVE') return send(res, 400, { ok: false, error: 'type LIVE to confirm' });
         const used = arm.consume(body && body.armId, gate.userId);
