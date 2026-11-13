@@ -66,6 +66,8 @@ Baris strategi dan filter biarkan saja, nanti bisa diubah dari menu Settings di 
 
 ## 5. Jalankan bot
 
+    pm2 start bot.js --name sol-lp-paper
+    pm2 start miniapp/server.js --name sol-lp-miniapp
     pm2 save
     pm2 startup
     pm2 status
@@ -74,11 +76,11 @@ Baris strategi dan filter biarkan saja, nanti bisa diubah dari menu Settings di 
 Setelah `pm2 startup`, jalankan perintah yang ditampilkan supaya bot nyala lagi setelah VPS reboot. Semua proses di `pm2 status` harus "online".
 
 ## 6. Mini app (dashboard di Telegram)
-Mini app jalan di `127.0.0.1:8797`, dan Telegram butuh alamat https. Pakai Cloudflare tunnel gratis:
+Mini app jalan di `127.0.0.1:8787`, dan Telegram butuh alamat https. Pakai Cloudflare tunnel gratis:
 
     curl -L -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
     chmod +x cloudflared && sudo mv cloudflared /usr/local/bin/
-    pm2 start "cloudflared tunnel --url http://127.0.0.1:8797" --name miniapp-tunnel
+    pm2 start "cloudflared tunnel --url http://127.0.0.1:8787" --name miniapp-tunnel
     pm2 logs miniapp-tunnel --lines 20
 
 1. Cari URL `https://xxxx.trycloudflare.com` di log, salin ke `MINIAPP_URL=` di `.env`, lalu `pm2 restart all`.
