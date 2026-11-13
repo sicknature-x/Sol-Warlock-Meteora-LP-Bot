@@ -66,7 +66,6 @@ Baris strategi dan filter biarkan saja, nanti bisa diubah dari menu Settings di 
 
 ## 5. Jalankan bot
 
-    pm2 start ecosystem.public.config.cjs
     pm2 save
     pm2 startup
     pm2 status
