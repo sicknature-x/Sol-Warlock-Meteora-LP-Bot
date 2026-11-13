@@ -113,3 +113,25 @@ button.cal-cell{appearance:none;-webkit-appearance:none;margin:0;font:inherit;co
 button.cal-cell{touch-action:manipulation}
 dialog{z-index:40}
 dialog.sheet-open{display:block;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);margin:0;width:calc(100% - 30px);max-width:440px;max-height:88vh;overflow:auto;z-index:40}
+
+/* ---- tombol: konsisten & mudah ditekan (posisi open + screening + modal) ---- */
+.btn{min-height:42px;border-radius:11px;font-weight:700;letter-spacing:.2px;transition:transform .08s ease,filter .15s ease,background .15s ease}
+.btn:active:not(:disabled){transform:scale(.97)}
+.btn:hover:not(:disabled){filter:brightness(1.12)}
+.pool-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.pool-actions .btn{min-height:40px;font-size:12.5px;display:flex;align-items:center;justify-content:center;gap:6px;background:#1b1a26;border:1px solid #30283e;color:#d8c6ff}
+.pool-actions .btn.chart-link::before{content:'\1F4C8'}
+.pool-actions .small-link{grid-column:span 1;display:flex;align-items:center;justify-content:center;min-height:36px;border-radius:10px;border:1px solid #2c2540;background:#14131d;font-size:12px;font-weight:650;text-decoration:none}
+button[data-closepool]{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:48px;margin:10px 0;font-size:14px;font-weight:800;border-radius:12px}
+button[data-closepool]::before{content:'\23F9'}
+.scan-caption .btn[data-rescan]{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:44px;margin:2px 0 10px;font-weight:750}
+.scan-caption .btn[data-rescan]::before{content:'\1F504'}
+.candidate button[data-openpool]{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:46px;margin-top:10px;font-size:14px;font-weight:800;border-radius:12px}
+.candidate button[data-openpool].primary::before{content:'\2795'}
+.candidate button[data-openpool]:disabled::before{content:'\2714'}
+.candidate select[data-replacement]{width:100%;min-height:42px;margin-top:6px;border-radius:10px}
+.seg{display:flex;gap:5px;padding:4px;background:#0b0b0f;border:1px solid #30283e;border-radius:12px;margin:8px 0}
+.seg-btn{flex:1;min-height:46px;border:0;border-radius:9px;background:transparent;color:#a69bb8;font-size:15px;font-weight:800;letter-spacing:.5px}
+.seg-btn.active{background:#6d3fc2;color:#fff;box-shadow:inset 0 0 0 1px #9e80ff55}
+
+.cal-unit{margin:2px 0 10px}.cal-unit .seg-btn{min-height:38px;font-size:13px}

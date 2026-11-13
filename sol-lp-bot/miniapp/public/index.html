@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
   <meta http-equiv="Pragma" content="no-cache">
-  <title>Sol Warlock v1.7 — Dry Run / Live</title>
+  <title>Sol Warlock v1.8 — Dry Run / Live</title>
   <link rel="stylesheet" href="/app.css?v=20261112-tvldrop">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
   <header class="top">
     <div>
-      <h1>Sol Warlock <span class="mode">v1.7</span></h1>
+      <h1>Sol Warlock <span class="mode">v1.8</span></h1>
       <p class="badge">SOLANA LP TERMINAL <span class="mode">DRY RUN</span></p>
     </div>
   </header>
@@ -25,7 +25,6 @@
     <p id="banner" class="banner hidden"></p>
 
     <section id="panel-status" class="panel">
-      <div id="strategy-status" class="card strategy-strip" aria-label="Strategi paper">Memuat strategi…</div>
       <div id="status-body" class="card summary">Memuat portofolio…</div>
       <div class="btn-row position-subtabs" role="tablist" aria-label="Panel portofolio paper"><button type="button" class="btn active" data-position-view="open" role="tab" aria-selected="true">Posisi open</button><button type="button" class="btn" data-position-view="history" role="tab" aria-selected="false">History</button><button type="button" class="btn" data-position-view="screening" role="tab" aria-selected="false">Screening</button><button type="button" class="btn" data-position-view="activity" role="tab" aria-selected="false">Aktivitas</button></div>
       <div id="open-view">
@@ -44,7 +43,6 @@
     </section>
 
     <section id="panel-settings" class="panel hidden">
-      <div id="strategy-settings" class="card strategy-strip" aria-label="Strategi paper">Memuat strategi…</div>
       <form id="settings-form" class="card"></form>
       <div class="btn-row sticky">
         <button type="button" id="btn-reset" class="btn ghost">Reset ke default</button>
@@ -65,12 +63,23 @@
           <button type="button" id="btn-resume" class="btn good">Resume</button>
         </div>
       </div>
+      <div id="capital-card" class="card">
+        <div class="k">Modal (dry run &amp; live)</div>
+        <div class="seg" role="group" aria-label="Aset modal">
+          <button type="button" id="btn-cap-USDC" class="seg-btn" data-capital="USDC" aria-pressed="false">USDC</button>
+          <button type="button" id="btn-cap-SOL" class="seg-btn" data-capital="SOL" aria-pressed="false">SOL</button>
+        </div>
+        <p id="capital-note" class="meta">Memuat setelan…</p>
+        <p class="meta">Satu pilihan untuk dry run dan live. Dry run juga bisa memakai modal SOL.</p>
+      </div>
       <form id="funding-form" class="card hidden">
         <h3>Tambah modal (dry run)</h3>
         <p id="funding-stats" class="meta"></p>
         <p class="meta">Virtual USDC saja, bukan transfer uang. Modal disetor tidak dihitung sebagai profit. Tidak mengubah posisi yang sedang terbuka.</p>
-        <label for="funding-amount">Jumlah USDC (1–10000)</label>
+        <div class="seg" data-unit-for="funding" role="group" aria-label="Satuan jumlah"><button type="button" class="seg-btn active" data-unit="USDC" aria-pressed="true">USDC</button><button type="button" class="seg-btn" data-unit="SOL" aria-pressed="false">SOL</button></div>
+        <label id="funding-label" for="funding-amount">Jumlah USDC (1–10000)</label>
         <input id="funding-amount" type="number" min="1" max="10000" step="0.000001" required placeholder="100">
+        <p id="funding-eq" class="meta" aria-live="polite"></p>
         <button id="btn-funding" type="submit" class="btn primary">Konfirmasi tambah modal</button>
         <p id="funding-result" class="meta" aria-live="polite"></p>
       </form>
@@ -78,8 +87,10 @@
         <h3>Edit modal dry run</h3>
         <p id="modal-stats" class="meta"></p>
         <p class="meta">Mulai dry run baru dari awal dengan modal ini. Dry run sekarang disimpan (tidak dihapus). Semua posisi harus sudah ditutup. SL blacklist dan settings tetap.</p>
-        <label for="modal-amount">Modal baru USDC (minimal 1)</label>
+        <div class="seg" data-unit-for="modal" role="group" aria-label="Satuan modal"><button type="button" class="seg-btn active" data-unit="USDC" aria-pressed="true">USDC</button><button type="button" class="seg-btn" data-unit="SOL" aria-pressed="false">SOL</button></div>
+        <label id="modal-label" for="modal-amount">Modal baru USDC (minimal 1)</label>
         <input id="modal-amount" type="number" min="0" step="0.000001" required value="0">
+        <p id="modal-eq" class="meta" aria-live="polite"></p>
         <button id="btn-modal" type="submit" class="btn danger">Edit modal &amp; mulai ulang</button>
         <p id="modal-result" class="meta" aria-live="polite"></p>
       </form>
@@ -109,6 +120,15 @@
         <div class="k">Alamat (public saja)</div>
         <p id="wallet-address" class="mono">Belum ada key</p>
         <p id="wallet-updated" class="meta"></p>
+      </div>
+      <div id="rent-card" class="card">
+        <div class="k">Claim Token Account</div>
+        <p class="meta">Menutup token account yang kosong (saldo 0) dan mengembalikan rent SOL-nya ke wallet ini sendiri (~0,002 SOL per akun). Bisa kapan saja, juga saat Live ON. USDC, wSOL, dan token dari posisi yang masih terbuka tidak disentuh.</p>
+        <p id="rent-result" class="meta">Belum dicek.</p>
+        <div class="btn-row">
+          <button type="button" id="btn-rent-scan" class="btn">Cek Token Account</button>
+          <button type="button" id="btn-rent-claim" class="btn primary hidden">Claim Token Account</button>
+        </div>
       </div>
       <form id="wallet-form" class="card">
         <label for="wallet-secret">Private key (disembunyikan, write-only)</label>

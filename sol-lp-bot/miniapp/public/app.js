@@ -160,7 +160,7 @@
   }
 
   function links(pool,mint,extra=false) {
-    return `<div class="pool-actions"><button class="btn copy" data-copy="${esc(validCA(pool)?pool:'')}" ${validCA(pool)?'':'disabled'}>▣ Salin CA</button><button class="btn chart-link" data-mint="${esc(validCA(mint)?mint:'')}" ${validCA(mint)?'':'disabled title="Mint belum tersedia"'}>Chart ↗</button>${extra && validCA(pool) ? `<a class="small-link" href="https://app.meteora.ag/dlmm/${esc(pool)}" target="_blank" rel="noopener noreferrer">Meteora ↗</a><a class="small-link" href="${esc(lpAgentUrl)}" target="_blank" rel="noopener noreferrer">LP Agent ↗</a>` : ''}</div>`;
+    return `<div class="pool-actions"><button type="button" class="btn copy" data-copy="${esc(validCA(pool)?pool:'')}" ${validCA(pool)?'':'disabled'}>▣ Salin CA</button><button type="button" class="btn chart-link" data-mint="${esc(validCA(mint)?mint:'')}" ${validCA(mint)?'':'disabled title="Mint belum tersedia"'}>Chart ↗</button>${extra && validCA(pool) ? `<a class="small-link" href="https://app.meteora.ag/dlmm/${esc(pool)}" target="_blank" rel="noopener noreferrer">Meteora ↗</a><a class="small-link" href="${esc(lpAgentUrl)}" target="_blank" rel="noopener noreferrer">LP Agent ↗</a>` : ''}</div>`;
   }
   function binChart(pos) {
     const model = pos.binShape;
@@ -209,14 +209,6 @@
     const rows=closedRows.filter(r=>!$('hide-dust').checked || Math.abs(+r.pnlUsd||0)>=.1);
     setMarkup($('closed'), rows.length?rows.map(r=>`<button class="card closed-row" data-trade="${closedRows.indexOf(r)}"><span><strong>${esc(r.name||'Pool')}</strong><small>${closeBadge(r)}${esc(wib(r.closedAt))} · ⏱ ${esc(durText(r))} · ${esc(r.closeReasonText||r.reason||'closed')}</small><small>${esc(r.openContext?.source||'tidak diketahui')} · ${esc(r.openContext?.reason||'Alasan buka tidak diketahui')}${r.corrected?' · DIKOREKSI (data asli disimpan)':''}</small></span><span class="mono ${isUsdcCapital(r)?pnlClass(r.pnlUsd):(numeric(r.pnlQuote)&&numeric(r.pnlQuoteUsd)?pnlClass(r.pnlQuoteUsd):pnlClass(r.pnlUsd))}">${isUsdcCapital(r)?esc(signedWithPct(r.pnlUsd,entryCapitalUsd(r))+' USDC'):(numeric(r.pnlQuote)?quotePnlHtml(r,entryCapitalUsd(r)):esc(signedWithPct(r.pnlUsd,entryCapitalUsd(r))+' USDC (riwayat lama)'))}<small>Lihat detail ↗</small></span></button>`).join(''):'<div class="card empty">Belum ada posisi ditutup dalam 24 jam.</div>');
   }
-  function renderStrategy(payload){
-    const active=payload.status?.summary?.strategy?.id||payload.status?.status?.strategy?.id||'N5';
-    const reason='M6 belum tersedia: sumber data/engine M6 belum terhubung. Bot ini memakai N5; posisi tidak diubah.';
-    for(const id of ['strategy-status','strategy-settings']){
-      const el=$(id);if(!el)continue;
-      setMarkup(el,`<div class="strategy-heading">Strategi paper</div><div class="strategy-buttons" role="group" aria-label="Pilihan strategi"><button type="button" class="active" data-strategy="N5" aria-pressed="true">N5 · aktif</button><button type="button" data-strategy="M6" disabled aria-pressed="false" title="${esc(reason)}">M6</button></div><p class="meta">${esc(reason)}</p>`);
-    }
-  }
   function portfolioPnl(entries,stats){
     const sum=xs=>xs.every(numeric)?xs.reduce((n,v)=>n+Number(v),0):null;
     const values=entries.map(e=>{const p=e.position||{},v=e.live||p.lastLive||{};return v.pnlUsd??p.lastPnlUsd;});
@@ -238,7 +230,6 @@
   }
   function renderStatus(payload) {
     lastPayload=payload;
-    renderStrategy(payload);
     const link=payload.status?.lpAgentUrl;
     if (typeof link==='string' && /^https:\/\/app\.lpagent\.io\/portfolio(?:\?|$)/.test(link)) lpAgentUrl=link;
     const st=payload.status||{}, summary=st.summary||{}, stats=summary.stats||{}, open=st.positions_open||{};
@@ -290,7 +281,7 @@
     if(candidateHeading)candidateHeading.textContent='Screening pool · top fees';
     const reasonText=(r)=>String(r).replace(/quote not SOL/g,'quote bukan SOL').replace(/fee\/tvl/g,'fee/TVL').replace(/tvl</g,'TVL di bawah ').replace(/age</g,'umur di bawah ').replace(/bin_step outside/g,'bin step di luar').replace(/pump1h/g,'pump 1j').replace(/pump24h/g,'pump 24j');
     const ageText=(h)=>numeric(h)?(+h<1?Math.floor(h*60)+'m':+h<24?Number(h).toFixed(1)+'j':Number(h/24).toFixed(1)+'hari'):'—';
-    setMarkup($('candidates'), `<div class="scan-caption">${st.screenRefresh?.stale?'<b class="negative">Scan lama, menunggu scan ulang</b><br>':''}<button type="button" class="btn ghost" data-rescan ${!paperAllowed||state.scanBusy||Date.now()-state.lastManualScanAt<30000?'disabled':''}>Scan ulang sekarang</button><br>Scan ${esc(wib(scan.at))} · ${esc(scan.fetched??'—')} pool diperiksa · ${esc(scan.passed??scan.candidates?.length??scan.n??0)} lolos<br><b class="positive">Sumber screening: Meteora datapi 30m</b><br>Filter saat scan ini: fee/TVL ≥${esc(scan.filters?.MIN_FT??payload.values?.MIN_FT??summary.filters?.minFt??'—')}% · TVL ≥${esc(money(scan.filters?.MIN_LIQ_USD??payload.values?.MIN_LIQ_USD??summary.filters?.minLiqUsd))} dan ≤${esc(money(scan.filters?.MAX_LIQ_USD??payload.values?.MAX_LIQ_USD))} · umur ≥${esc(scan.filters?.MIN_AGE_H??payload.values?.MIN_AGE_H??summary.filters?.minAgeH??'—')}j · BIN ${esc(scan.filters?.MIN_BIN_STEP??payload.values?.MIN_BIN_STEP??100)}–${esc(scan.filters?.MAX_BIN_STEP??payload.values?.MAX_BIN_STEP??400)}<br>${scan.filters?.ANTI_PVP_MODE!==undefined?'Filter token: '+(scan.filters.FILTERS_ENABLED?'ON':'<b class="negative">OFF semua</b>')+' · pump 1j '+(scan.filters.PUMP1H_FILTER_ENABLED?'ON':'OFF')+' · pump 24j '+(scan.filters.PUMP24H_FILTER_ENABLED?'ON':'OFF')+' · RugCheck '+(scan.filters.RUGCHECK?'ON':'OFF')+' · top holder '+(scan.filters.CHECK_TOP_HOLDERS?'ON':'OFF')+' · insider '+(scan.filters.CHECK_INSIDERS?'≤'+esc(scan.filters.MAX_INSIDER_PCT)+'%':'OFF')+' · anti PvP '+esc(scan.filters.ANTI_PVP_MODE)+(scan.filters.TVL_DROP_FILTER_ENABLED!==undefined?' · TVL turun '+(scan.filters.TVL_DROP_FILTER_ENABLED?'ON ≥'+esc(scan.filters.TVL_DROP_MAX_PCT)+'%':'OFF'):'')+'<br>':''}${st.screenRefresh?.stale?'Setting sekarang BIN '+esc(payload.values?.MIN_BIN_STEP)+'–'+esc(payload.values?.MAX_BIN_STEP)+'; alasan merah di bawah masih milik scan '+esc(wib(scan.at))+'.<br>':''}Eligible: ${esc(scan.coverage?.eligibleTotal??'—')} pool · ${esc(scan.coverage?.eligiblePages??'—')} halaman · urut fee/TVL</div>`+(near.length?near.map(c=>{const held=entries.some(e=>e.position.pool===c.address),bypass=costBypass(c,payload.values),attempt=(summary.lastScan?.openResults||[]).find(x=>x.address===c.address||(!x.address&&x.pool===c.name));return `<div class="candidate"><div class="candidate-top"><strong>${esc(c.name)}</strong><b class="purple mono">${numeric(c.ft30m)?Number(c.ft30m).toFixed(3)+'%':'—'}</b></div><div class="meta">Fees 30m ${esc(money(c.fees30mUsd))} · TVL ${esc(money(c.tvl))} · MC ${esc(money(c.marketCapUsd))}<br>BIN ${esc(c.binStep??'—')} / ${numeric(c.baseFeePct)?esc(c.baseFeePct)+'%':'—'} · umur ${esc(ageText(c.ageH))} · quote ${esc(c.quote||'SOL')}<br>Non-refundable: ${bypass?esc(bypass):c.entryCostEstimate?.known?esc(c.entryCostEstimate.nonrefTotalSol.toFixed(6)+' SOL · '+c.entryCostEstimate.newBinArrays+' bin array baru'):'belum dihitung; dicek wajib sebelum open'}</div>${c.isOpen||held?`<div class="meta positive"><b>● OPEN</b>${c.openInfo?` · dibuka ${esc(wib(c.openInfo.openedAt))}${c.openInfo.source?' · '+esc(c.openInfo.source):''}<br><b>Alasan dibuka:</b>${c.openInfo.list.length?c.openInfo.list.map(x=>'<br>'+(x.s==='pass'?'✓':x.s==='warn'?'⚠':'ℹ️')+' '+esc(x.t)).join(''):' data entry tidak tersedia'}`:''}</div>`:''}<div class="meta ${c.isOpen?'':c.status==='passed'?'positive':c.status==='pending'?'purple':'negative'}">${c.isOpen?'<b>Status filter sekarang</b> (posisi tetap open, tidak ditutup karena ini) · ':''}Scan ${esc(wib(scan.at))} · ${reasonsHtml(c,reasonText)}</div>${attempt&&(attempt.skipped||attempt.error)?`<p class="meta negative">Open tertunda: ${esc(attempt.skipped||attempt.error)}${bypass?' · NONREF SUDAH DILEWATI':''}</p>`:''}${links(c.address,c.mintX)}<button type="button" class="btn ${c.status==='passed'?'primary':'ghost'}" data-openpool="${esc(c.address)}" ${paperAllowed&&!held&&!(c.reasons||[]).some(r=>/tvl>|Cooldown|pump24/.test(r)||(!bypass&&/non-refundable/i.test(r)))?'':'disabled'}>${held?'Sudah dibuka':full?'Ganti dengan posisi...':'Open sekarang'}${!held&&c.status!=='passed'?' · ⚠':''}</button>${!held&&full?`<p class="meta">Slot penuh (${slotCount}/${maxPositions}) · pilih posisi yang diganti</p><select data-replacement="${esc(c.address)}">${entries.map(e=>`<option value="${esc(e.position.pool)}" ${state.replacements[c.address]===e.position.pool?'selected':''}>${esc(e.position.name)} · ${esc(quotePnlText(e.live||{}))}</option>`).join('')}</select>`:''}</div>`;}).join(''):'<p class="empty">Menunggu daftar kandidat dari scan berikutnya.</p>'));
+    setMarkup($('candidates'), `<div class="scan-caption">${st.screenRefresh?.stale?'<b class="negative">Scan lama, menunggu scan ulang</b><br>':''}<button type="button" class="btn ghost" data-rescan ${!paperAllowed||state.scanBusy||Date.now()-state.lastManualScanAt<30000?'disabled':''}>Scan ulang sekarang</button><br>Scan ${esc(wib(scan.at))} · ${esc(scan.fetched??'—')} pool diperiksa · ${esc(scan.passed??scan.candidates?.length??scan.n??0)} lolos<br><b class="positive">Sumber screening: Meteora datapi 30m</b><br>Filter saat scan ini: fee/TVL ≥${esc(scan.filters?.MIN_FT??payload.values?.MIN_FT??summary.filters?.minFt??'—')}% · TVL ≥${esc(money(scan.filters?.MIN_LIQ_USD??payload.values?.MIN_LIQ_USD??summary.filters?.minLiqUsd))} dan ≤${esc(money(scan.filters?.MAX_LIQ_USD??payload.values?.MAX_LIQ_USD))} · umur ≥${esc(scan.filters?.MIN_AGE_H??payload.values?.MIN_AGE_H??summary.filters?.minAgeH??'—')}j · BIN ${esc(scan.filters?.MIN_BIN_STEP??payload.values?.MIN_BIN_STEP??100)}–${esc(scan.filters?.MAX_BIN_STEP??payload.values?.MAX_BIN_STEP??400)}<br>${scan.filters?.ANTI_PVP_MODE!==undefined?'Filter token: '+(scan.filters.FILTERS_ENABLED?'ON':'<b class="negative">OFF semua</b>')+' · pump 1j '+(scan.filters.PUMP1H_FILTER_ENABLED?'ON':'OFF')+' · pump 24j '+(scan.filters.PUMP24H_FILTER_ENABLED?'ON':'OFF')+' · RugCheck '+(scan.filters.RUGCHECK?'ON':'OFF')+' · top holder '+(scan.filters.CHECK_TOP_HOLDERS?'ON':'OFF')+' · insider '+(scan.filters.CHECK_INSIDERS?'≤'+esc(scan.filters.MAX_INSIDER_PCT)+'%':'OFF')+' · anti PvP '+esc(scan.filters.ANTI_PVP_MODE)+(scan.filters.TVL_DROP_FILTER_ENABLED!==undefined?' · TVL turun '+(scan.filters.TVL_DROP_FILTER_ENABLED?'ON ≥'+esc(scan.filters.TVL_DROP_MAX_PCT)+'%':'OFF'):'')+'<br>':''}${st.screenRefresh?.stale?'Setting sekarang BIN '+esc(payload.values?.MIN_BIN_STEP)+'–'+esc(payload.values?.MAX_BIN_STEP)+'; alasan merah di bawah masih milik scan '+esc(wib(scan.at))+'.<br>':''}Eligible: ${esc(scan.coverage?.eligibleTotal??'—')} pool · ${esc(scan.coverage?.eligiblePages??'—')} halaman · urut fee/TVL</div>`+(near.length?near.map(c=>{const held=entries.some(e=>e.position.pool===c.address),bypass=costBypass(c,payload.values),attempt=(summary.lastScan?.openResults||[]).find(x=>x.address===c.address||(!x.address&&x.pool===c.name));return `<div class="candidate"><div class="candidate-top"><strong>${esc(c.name)}</strong><b class="purple mono">${numeric(c.ft30m)?Number(c.ft30m).toFixed(3)+'%':'—'}</b></div><div class="meta">Fees 30m ${esc(money(c.fees30mUsd))} · TVL ${esc(money(c.tvl))} · MC ${esc(money(c.marketCapUsd))}<br>BIN ${esc(c.binStep??'—')} / ${numeric(c.baseFeePct)?esc(c.baseFeePct)+'%':'—'} · umur ${esc(ageText(c.ageH))} · quote ${esc(c.quote||'SOL')}<br>Non-refundable: ${bypass?esc(bypass):c.entryCostEstimate?.known?esc(c.entryCostEstimate.nonrefTotalSol.toFixed(6)+' SOL · '+c.entryCostEstimate.newBinArrays+' bin array baru'):'belum dihitung; dicek wajib sebelum open'}</div>${c.isOpen||held?`<div class="meta positive"><b>● OPEN</b>${c.openInfo?` · dibuka ${esc(wib(c.openInfo.openedAt))}${c.openInfo.source?' · '+esc(c.openInfo.source):''}<br><b>Alasan dibuka:</b>${c.openInfo.list.length?c.openInfo.list.map(x=>'<br>'+(x.s==='pass'?'✓':x.s==='warn'?'⚠':'ℹ️')+' '+esc(x.t)).join(''):' data entry tidak tersedia'}`:''}</div>`:''}<div class="meta ${c.isOpen?'':c.status==='passed'?'positive':c.status==='pending'?'purple':'negative'}">${c.isOpen?'<b>Status filter sekarang</b> (posisi tetap open, tidak ditutup karena ini) · ':''}Scan ${esc(wib(scan.at))} · ${reasonsHtml(c,reasonText)}</div>${attempt&&(attempt.skipped||attempt.error)?`<p class="meta negative">Open tertunda: ${esc(attempt.skipped||attempt.error)}${bypass?' · NONREF SUDAH DILEWATI':''}</p>`:''}${links(c.address,c.mintX)}<button type="button" class="btn ${c.status==='passed'?'primary':'ghost'}" data-openpool="${esc(c.address)}" ${paperAllowed&&!held?'':'disabled'}>${held?'Sudah dibuka':full?'Ganti dengan posisi...':'Open sekarang'}${!held&&c.status!=='passed'?' · ⚠':''}</button>${!held&&full?`<p class="meta">Slot penuh (${slotCount}/${maxPositions}) · pilih posisi yang diganti</p><select data-replacement="${esc(c.address)}">${entries.map(e=>`<option value="${esc(e.position.pool)}" ${state.replacements[c.address]===e.position.pool?'selected':''}>${esc(e.position.name)} · ${esc(quotePnlText(e.live||{}))}</option>`).join('')}</select>`:''}</div>`;}).join(''):'<p class="empty">Menunggu daftar kandidat dari scan berikutnya.</p>'));
     const activity=st.activity||[];
     const feed=activity.map(e=>`<div class="event ${esc(e.kind)}"><span class="event-dot"></span><div><time>${esc(e.atWib)}</time><p>${esc(e.text)}</p></div></div>`).join('')||'<div class="empty">Belum ada event.</div>';
     // Stable DOM while unchanged: preserves scrolling and button focus across polls.
@@ -340,12 +331,29 @@
   });
   const askConfirm=message=>tg?.showConfirm?new Promise(resolve=>tg.showConfirm(message,resolve)):Promise.resolve(window.confirm(message));
   const requestId=()=>globalThis.crypto?.randomUUID?.()||('paper-'+Date.now()+'-'+Math.random().toString(36).slice(2));
+  // ---- Opsi SOL untuk tambah modal & edit modal dry run: jumlah SOL dikonversi ke USDC virtual pada harga SOL sekarang (ledger tetap USDC).
+  const solPx=()=>Number(lastPayload?.status?.summary?.stats?.solUsd)||0;
+  state.unit={funding:null,modal:null};
+  const unitOf=p=>{if(!state.unit[p])state.unit[p]=state.fields?.CAPITAL_ASSET?.value==='SOL'?'SOL':'USDC';return state.unit[p];};
+  function amountUsd(p,raw){const u=unitOf(p),n=Number(raw);if(String(raw).trim()===''||!Number.isFinite(n))return NaN;if(u==='SOL'){const px=solPx();return px>0?Math.round(n*px*1e6)/1e6:NaN;}return n;}
+  function renderUnits(){
+    for(const p of ['funding','modal']){
+      const u=unitOf(p),inp=$(p==='funding'?'funding-amount':'modal-amount'),lab=$(p+'-label'),eq=$(p+'-eq');if(!inp)continue;
+      document.querySelectorAll(`[data-unit-for="${p}"] [data-unit]`).forEach(x=>{const on=x.dataset.unit===u;x.classList.toggle('active',on);x.setAttribute('aria-pressed',String(on));});
+      if(lab)lab.textContent=p==='funding'?(u==='SOL'?'Jumlah SOL (setara USDC 1–10000)':'Jumlah USDC (1–10000)'):(u==='SOL'?'Modal baru SOL (setara USDC minimal 1)':'Modal baru USDC (minimal 1)');
+      if(u==='SOL'){inp.removeAttribute('max');inp.min='0';}else if(p==='funding'){inp.min='1';inp.max='10000';}else{inp.min='0';inp.removeAttribute('max');}
+      const px=solPx(),n=Number(inp.value),usd=amountUsd(p,inp.value);
+      if(eq)eq.textContent=u==='SOL'?(px>0?(Number.isFinite(usd)?`≈ ${money(usd)} (SOL × $${px.toFixed(2)})`:`Harga SOL $${px.toFixed(2)}`):'Harga SOL belum tersedia; coba lagi sebentar.'):(px>0&&Number.isFinite(n)&&n>0?`≈ ${(n/px).toFixed(4)} SOL @ $${px.toFixed(2)}`:'');
+    }
+  }
+  document.addEventListener('click',e=>{const u=e.target.closest('[data-unit-for] [data-unit]');if(!u)return;const p=u.closest('[data-unit-for]').dataset.unitFor;state.unit[p]=u.dataset.unit;renderUnits();});
+  document.addEventListener('input',e=>{if(e.target&&(e.target.id==='funding-amount'||e.target.id==='modal-amount'))renderUnits();});
   $('funding-form').addEventListener('submit',async e=>{
     e.preventDefault();if(state.actionBusy||!state.paperAllowed)return;
-    const amount=Number($('funding-amount').value);if(!Number.isFinite(amount)||amount<1||amount>10000){showBanner('Jumlah harus 1–10000 USDC.',true);return;}
+    const amount=amountUsd('funding',$('funding-amount').value);if(!Number.isFinite(amount)||amount<1||amount>10000){showBanner(unitOf('funding')==='SOL'?'Setara USDC harus 1–10000 (cek jumlah SOL dan harga SOL).':'Jumlah harus 1–10000 USDC.',true);return;}
     state.actionBusy=true;$('btn-funding').disabled=true;
     try{
-      if(!await askConfirm(`Tambah ${amount} USDC virtual? Ini DRY RUN, bukan transfer uang.`))return;
+      if(!await askConfirm(`Tambah ${unitOf('funding')==='SOL'?Number($('funding-amount').value)+' SOL ≈ ':''}${amount} USDC virtual? Ini DRY RUN, bukan transfer uang.`))return;
       const {status,json}=await api('POST','/api/paper/capital/deposit',{amount,confirmed:true,requestId:requestId()});
       if(status!==202||!json.ok)throw Error(json.error||'Top-up gagal');
       $('funding-result').textContent=`+${amount} USDC antre; bot menerapkan tanpa mengubah posisi. Biasanya 5–10 detik (bisa lebih lama saat scan).`;
@@ -366,7 +374,7 @@
     d.querySelector('#mc-cancel').onclick=()=>done(false);d.querySelector('#mc-ok').onclick=()=>done(true);d.addEventListener('cancel',e=>{e.preventDefault();done(false);});d.showModal();});}
   $('modal-form')?.addEventListener('submit',async e=>{
     e.preventDefault();if(state.actionBusy||!state.paperAllowed)return;
-    const raw=$('modal-amount').value,amount=Number(raw);if(String(raw).trim()===''||!Number.isFinite(amount)||amount<1){showBanner('Modal minimal $1',true);return;}
+    const raw=$('modal-amount').value,amount=amountUsd('modal',raw);if(!Number.isFinite(amount)||amount<1){showBanner(unitOf('modal')==='SOL'?'Modal minimal setara $1 (cek jumlah SOL dan harga SOL).':'Modal minimal $1',true);return;}
     const info=state.runInfo||{};if(info.openCount){showBanner('Tutup semua posisi dulu',true);return;}
     const oldModal=Number(info.current?.modal??info.deposited??0),num=info.current?.number??1,cash=Number(info.cash??0);
     state.actionBusy=true;$('btn-modal').disabled=true;
@@ -401,7 +409,7 @@
       const candidate=(scan.display||scan.near||scan.candidates||[]).find(x=>x.address===pool),override=opening&&candidate?.status!=='passed';
       const reasons=candidate?.reasons||['Pemeriksaan semua filter belum selesai'];
       let overrideConfirmed=false;
-      if(override){if(!await askConfirm('PERINGATAN: '+reasons.join('; ')+'. Ini override filter screening PAPER. TVL/quote/anti-rug tetap wajib dan tidak dapat dilewati. Nilai pasar akan diperiksa ulang.'))return;overrideConfirmed=true;}
+      if(override){if(!await askConfirm('PERINGATAN: '+reasons.join('; ')+'. Ini override filter screening PAPER. Filter biasa bisa dilewati, tapi TVL, quote, RugCheck, mint, insider dan holder tetap wajib: kalau kena, bot menolak open dan alasannya tampil di aktivitas. Nilai pasar diperiksa ulang.'))return;overrideConfirmed=true;}
       const replacing=opening&&full&&!!pos,pnl=live.pnlUsd??pos?.lastPnlUsd;
       const settlement=pos?.capitalAsset||'USDC';
       const message=replacing?`Ganti ${pos.name} ke ${candidate?.name||pool}? Posisi lama ditutup ke ${settlement} (estimasi PnL USD ${signed(pnl)}), lalu buka pool pilihan. Biaya swap/gas berlaku; quote bisa berubah.`:opening?'Open posisi sekarang? PAPER saja.':`Tutup posisi dan kembali ke ${settlement} sekarang? PAPER saja.`;
@@ -413,11 +421,6 @@
     }catch(e){showBanner(e.message,true);}finally{state.actionBusy=false;if(b.isConnected)b.disabled=false;}
   });
 
-  document.addEventListener('click',async e=>{
-    const b=e.target.closest('[data-strategy]');if(!b||b.disabled)return;
-    if(!await askConfirm('Pilih N5? N5 sudah aktif. Ini tidak membuka/menutup posisi dan tidak menyentuh live.'))return;
-    showBanner('N5 tetap aktif. M6 belum dapat dipilih karena sumber data/engine belum tersedia.');
-  });
   $('hide-dust').addEventListener('change',renderClosed);
   $('close-modal').onclick=()=>hideSheet($('trade-modal'));
   $('cal-day-close').onclick=()=>hideSheet($('cal-day-modal'));
@@ -431,7 +434,7 @@
   const intPct=t=>/^\d{1,3}$/.test(String(t).trim())&&+t<=100?+t:null;
   document.addEventListener('input',e=>{const b=e.target.closest('[data-ratio-box]');if(!b)return;const k=b.dataset.ratioBox,side=b.dataset.side,sp=document.getElementById('rs-'+k),ba=document.getElementById('rb-'+k),h=document.getElementById('f-'+k);const v=intPct(b.value);if(v!=null){(side==='s'?ba:sp).value=100-v;}const a=intPct(sp.value),c=intPct(ba.value),ok=a!=null&&c!=null&&a+c===100;h.value=ok?a:'';sp.style.borderColor=ba.style.borderColor=ok?'':'#ef4444';});
   const enumLabels={OLD_TOKEN_MODE:{BLOCK_ALL:'Blok semua token tua (umur > batas)',DUMP_ONLY:'Hanya yang lagi dump (pump 24 jam < batas)'},ANTI_PVP_MODE:{KEEP_BIGGEST:'Ambil yang likuiditasnya terbesar (bukan yang tertua), skip kembarannya',SKIP_ALL:'Skip semua kalau ada kembaran',OFF:'OFF'}};
-  const tokenFilterKeys=['FILTERS_ENABLED','PUMP1H_FILTER_ENABLED','PUMP24H_FILTER_ENABLED','RUGCHECK_ENABLED','TOP_HOLDERS_ENABLED','CHECK_INSIDERS','MAX_INSIDER_PCT','ANTI_PVP_MODE','ANTI_PVP_MIN_LIQ_USD','OLD_DUMP_FILTER_ENABLED','OLD_TOKEN_MODE','OLD_DUMP_MIN_AGE_H','OLD_DUMP_MAX_PUMP24H','TVL_DROP_FILTER_ENABLED','TVL_DROP_MAX_PCT'];
+  const tokenFilterKeys=['FILTERS_ENABLED','PUMP1H_FILTER_ENABLED','PUMP24H_FILTER_ENABLED','RUGCHECK_ENABLED','RUGCHECK_STICKY_DAYS','FEE_TURNOVER_MAX_PCT','FEE_TURNOVER_TVL_BELOW_USD','TOP_HOLDERS_ENABLED','CHECK_INSIDERS','MAX_INSIDER_PCT','ANTI_PVP_MODE','ANTI_PVP_MIN_LIQ_USD','OLD_DUMP_FILTER_ENABLED','OLD_TOKEN_MODE','OLD_DUMP_MIN_AGE_H','OLD_DUMP_MAX_PUMP24H','TVL_DROP_FILTER_ENABLED','TVL_DROP_MAX_PCT'];
   // All reasons a pool is not opened (display only; open decision is unchanged in the bot).
   function reasonsHtml(c,reasonText){
     const all=Array.isArray(c.allReasons)?c.allReasons:null,line=(icon,x)=>'<br>'+icon+' '+esc(x.t),orig=()=>esc((c.reasons||['belum lolos semua filter']).map(reasonText).join(' · '));
@@ -465,7 +468,7 @@
     return wrap;
   }
 
-  const strategyKeys=['NOTIFY_RESHAPE','QUOTE_FAILURE_POLLS','RANGE_DOWN_PCT', 'LOWER_BINS', 'RANGE_UP_PCT', 'UPPER_BUFFER_BINS', 'OPEN_SHAPE', 'OPEN_SPOT_PCT', 'RESHAPE_ENABLED', 'RESHAPE_N', 'RESHAPE_SHAPE', 'COMPOUND_ENABLED', 'COMPOUND_SPOT_PCT', 'MAX_POSITION_TVL_PCT', 'TP_USD_PCT', 'EMERGENCY_DROP', 'EMERGENCY_TP_ENABLED', 'EMERGENCY_TP_TRIGGER_RANGE_PCT', 'EMERGENCY_TP_PCT','EMERGENCY_SLPLUS_ENABLED','EMERGENCY_SLPLUS_ARM_PCT','EMERGENCY_SLPLUS_LOCK_PCT','EMERGENCY_SLPLUS_CONFIRM_POLLS','EMERGENCY_SLPLUS_FLOOR_PCT','EMERGENCY_SLPLUS_FLOOR_POLLS', 'OOR_RIGHT_CLOSE', 'OOR_RIGHT_CONFIRM_POLLS', 'OOR_RIGHT_MIN_PROFIT_PCT', 'OOR_RIGHT_MAX_REPOSITIONS', 'MAX_HOURS', 'TRAIL_ENABLED', 'TRAIL_ARM_PCT', 'TRAIL_DROP_PCT', 'OOR_MAX_MIN', 'GAS_BUFFER_SOL'];
+  const strategyKeys=['NOTIFY_RESHAPE','QUOTE_FAILURE_POLLS','RANGE_DOWN_PCT', 'LOWER_BINS', 'RANGE_UP_PCT', 'UPPER_BUFFER_BINS', 'OPEN_SHAPE', 'OPEN_SPOT_PCT', 'RESHAPE_ENABLED', 'RESHAPE_N', 'RESHAPE_SHAPE', 'COMPOUND_ENABLED', 'COMPOUND_SPOT_PCT', 'MAX_POSITION_TVL_PCT', 'TP_USD_PCT', 'EMERGENCY_DROP', 'EMERGENCY_TP_ENABLED', 'EMERGENCY_TP_TRIGGER_RANGE_PCT', 'EMERGENCY_TP_PCT','EMERGENCY_SLPLUS_ENABLED','EMERGENCY_SLPLUS_ARM_PCT','EMERGENCY_SLPLUS_LOCK_PCT','EMERGENCY_SLPLUS_CONFIRM_POLLS','EMERGENCY_SLPLUS_FLOOR_PCT','EMERGENCY_SLPLUS_FLOOR_POLLS', 'OOR_RIGHT_CLOSE', 'OOR_RIGHT_CONFIRM_POLLS', 'OOR_RIGHT_MIN_BINS', 'OOR_RIGHT_REPOSITION_MIN_PNL_PCT', 'OOR_RIGHT_MIN_PROFIT_PCT', 'OOR_RIGHT_MAX_REPOSITIONS', 'MAX_HOURS', 'TRAIL_ENABLED', 'TRAIL_ARM_PCT', 'TRAIL_DROP_PCT', 'OOR_MAX_MIN', 'GAS_BUFFER_SOL'];
   const ppKeys=['EMERGENCY_TP_ENABLED','EMERGENCY_TP_TRIGGER_RANGE_PCT','EMERGENCY_TP_PCT','EMERGENCY_SLPLUS_ENABLED','EMERGENCY_SLPLUS_ARM_PCT','EMERGENCY_SLPLUS_LOCK_PCT','EMERGENCY_SLPLUS_CONFIRM_POLLS','EMERGENCY_SLPLUS_FLOOR_PCT','EMERGENCY_SLPLUS_FLOOR_POLLS'];
   function boldField(el,key){if(/^TRAIL_/.test(key)){el.style.fontWeight='800';el.querySelectorAll('label').forEach(l=>{l.style.fontWeight='800';l.style.color='#e9d5ff';});}if(key==='EMERGENCY_DROP'||key==='EMERGENCY_TP_ENABLED')el.querySelectorAll('label').forEach(l=>l.style.fontWeight='700');return el;}
   function trailWarning(){return new Promise(resolve=>{
@@ -479,8 +482,34 @@
     d.addEventListener('cancel',e=>{e.preventDefault();done(false);});
     d.showModal();
   });}
+  // ---- Modal USDC / SOL (menu Live). Satu setelan bersama: dry run dan live memakai aset modal yang sama.
+  function renderCapital() {
+    const cur = state.fields?.CAPITAL_ASSET?.value || null;
+    for (const id of ['USDC', 'SOL']) {
+      const b = $('btn-cap-' + id); if (!b) continue;
+      b.classList.toggle('active', cur === id); b.setAttribute('aria-pressed', String(cur === id));
+    }
+    const n = $('capital-note');
+    if (n) n.textContent = cur ? ('Modal aktif: ' + cur + (cur === 'SOL' ? ' · budget posisi = USD setara SOL saat open; PnL utama dalam SOL.' : ' · PnL utama dalam USDC (sudah termasuk swap, gas, rent).')) : 'Memuat setelan…';
+  }
+  document.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-capital]'); if (!b || b.disabled) return;
+    const to = b.dataset.capital, cur = state.fields?.CAPITAL_ASSET?.value || 'USDC';
+    if (to === cur) { showBanner('Modal sudah ' + to + '.'); return; }
+    if (!await askConfirm('Ganti aset modal ke ' + to + '?\n\nBerlaku untuk dry run dan live (satu setelan). Saldo bebas dikonversi pada quote/estimasi saat bot memproses, biaya swap berlaku. Hanya posisi BARU memakai basis dan aturan exit aset ini; posisi lama tetap basis lama.')) return;
+    document.querySelectorAll('[data-capital]').forEach(x => { x.disabled = true; });
+    try {
+      const { status, json } = await api('POST', '/api/settings', { settings: { CAPITAL_ASSET: to }, capitalAssetConfirmed: true });
+      if (status !== 200 || !json.ok) { const rej = (json.rejected || []).map(r => r.key + ': ' + r.reason).join('; '); showBanner('Modal tidak diganti. ' + (rej || json.reason || json.error || status), true); }
+      else showBanner('Modal sekarang ' + to + '. Berlaku untuk posisi baru (dry run & live).');
+    } catch (err) { showBanner('Ganti modal gagal: ' + err.message, true); }
+    finally { document.querySelectorAll('[data-capital]').forEach(x => { x.disabled = false; }); await refresh(); }
+  });
+
   function renderSettings(payload) {
     state.fields = payload.fields;
+    renderCapital();
+    renderUnits();
     state.paused = !!payload.paused;
     $('pause-state').textContent = state.paused ? 'Paused' : 'Berjalan';
     const form = $('settings-form');
@@ -488,7 +517,7 @@
     const section=document.createElement('fieldset');section.className='strategy-settings';section.innerHTML='<legend>Strategy · N5</legend><p class="meta">Berlaku hanya posisi baru. Posisi open tetap memakai snapshot strategi saat entry. Range bawah = target coverage bin (bin dibulatkan); range atas 0 memakai jumlah bin atas. MIXED memakai persentase Spot; Bid-Ask sisanya. Ini bukan split token/quote: porsi token/quote mengikuti jumlah bin atas/bawah.</p>';form.appendChild(section);
     for(const key of strategyKeys)if(payload.fields[key])section.appendChild(boldField(fieldInput(key,payload.fields[key]),key));
     const order = [
-      'CAPITAL_ASSET', 'MIN_FT', 'MIN_LIQ_USD', 'MAX_LIQ_USD', 'MAX_NONREFUND_SOL', 'MIN_AGE_H', 'MIN_BIN_STEP', 'MAX_BIN_STEP', 'POSITION_USDC', 'REOPEN_COOLDOWN_MIN', 'SL_BLACKLIST_ENABLED', 'MAX_PUMP24H_PCT', 'MAX_POSITIONS', 'UPPER_BUFFER_BINS', 'OOR_RIGHT_CONFIRM_POLLS', 'OOR_RIGHT_MIN_PROFIT_PCT', 'OOR_RIGHT_MAX_REPOSITIONS', 'RESHAPE_N', 'TP_USD_PCT', 'OOR_RIGHT_CLOSE', 'TRAIL_ENABLED', 'TRAIL_ARM_PCT', 'TRAIL_DROP_PCT', 'OOR_MAX_MIN', 'EMERGENCY_DROP',
+      'MIN_FT', 'MIN_LIQ_USD', 'MAX_LIQ_USD', 'MAX_NONREFUND_SOL', 'MIN_AGE_H', 'MIN_BIN_STEP', 'MAX_BIN_STEP', 'POSITION_USDC', 'REOPEN_COOLDOWN_MIN', 'SL_BLACKLIST_ENABLED', 'MAX_PUMP24H_PCT', 'MAX_POSITIONS', 'UPPER_BUFFER_BINS', 'OOR_RIGHT_CONFIRM_POLLS', 'OOR_RIGHT_MIN_BINS', 'OOR_RIGHT_REPOSITION_MIN_PNL_PCT', 'OOR_RIGHT_MIN_PROFIT_PCT', 'OOR_RIGHT_MAX_REPOSITIONS', 'RESHAPE_N', 'TP_USD_PCT', 'OOR_RIGHT_CLOSE', 'TRAIL_ENABLED', 'TRAIL_ARM_PCT', 'TRAIL_DROP_PCT', 'OOR_MAX_MIN', 'EMERGENCY_DROP',
       'STALE_CLOSE_ENABLED', 'MAX_HOURS', 'STALE_EXIT_MODE', 'STALE_EXIT_PCT', 'GAS_BUFFER_SOL', 'MAX_PUMP1H', 'VOL_SPIKE_1H_OF_24H',
     ];
     const staleGroup=['MAX_HOURS','STALE_CLOSE_ENABLED','STALE_EXIT_MODE','STALE_EXIT_PCT'];
@@ -577,9 +606,11 @@
   }
 
   // ---- PnL Calendar (Wallet sub-menu) ----
-  const cal={data:null,ym:null,busy:false};
+  const cal={data:null,ym:null,busy:false,unit:(()=>{try{return localStorage.getItem('calUnit')==='SOL'?'SOL':'USD';}catch(_){return 'USD';}})()};
   const wibNow=()=>new Date(); /* calendar days are UTC dates: reset 00:00 UTC = 07:00 WIB */
-  const calMoney=v=>(v>=0?'+':'−')+'$'+Math.abs(v).toFixed(Math.abs(v)>=100?0:2);
+  const calSol=()=>cal.unit==='SOL';
+  const calMoney=v=>calSol()?(v>=0?'+':'−')+Math.abs(v).toFixed(Math.abs(v)>=10?2:3)+' SOL':(v>=0?'+':'−')+'$'+Math.abs(v).toFixed(Math.abs(v)>=100?0:2);
+  const calFmt=v=>calSol()?calMoney(Number(v)||0):signed(v);   // tampilan rinci: USD pakai format biasa, SOL pakai 3-6 desimal
   const MONTHS=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
   function renderCal(){
     const box=$('pnlcal');if(!box)return;const d=cal.data;
@@ -589,15 +620,16 @@
     let tot=0,trades=0,win=0,loss=0,cells='';
     for(let i=0;i<first;i++)cells+='<div class="cal-cell cal-pad"></div>';
     for(let day=1;day<=dim;day++){const k=pre+String(day).padStart(2,'0'),x=d.days[k];let cls='cal-cell',body='';
-      if(x){tot+=x.pnl;trades+=x.trades;x.pnl>0?win++:x.pnl<0?loss++:0;cls+=x.pnl>0?' cal-pos':x.pnl<0?' cal-neg':' cal-flat';body=`<b>${esc(calMoney(x.pnl))}</b><small>${x.trades} trx</small>`;}
+      if(x){const pv=calSol()?(x.pnlSol??0):x.pnl;tot+=pv;trades+=x.trades;pv>0?win++:pv<0?loss++:0;cls+=pv>0?' cal-pos':pv<0?' cal-neg':' cal-flat';body=`<b>${esc(calMoney(pv))}</b><small>${x.trades} trx</small>`;}
       if(k===today)cls+=' cal-today';cells+=`<button type="button" class="${cls}" data-cal-day="${k}" aria-label="Rincian ${day} ${MONTHS[m]} ${y}"><span class="cal-day">${day}</span>${body}</button>`;}
     const mo=d.mode||{label:'DRY RUN'},badge=`<span class="cal-mode ${mo.live?'live':'dry'}">${esc(mo.label)}</span>`;
     box.innerHTML=`<div class="section-head" style="margin:0 0 10px"><h2>📅 PnL Calendar</h2>${badge}</div>
+      <div class="seg cal-unit" role="group" aria-label="Satuan PnL"><button type="button" class="seg-btn ${calSol()?'':'active'}" data-cal-unit="USD" aria-pressed="${!calSol()}">USD</button><button type="button" class="seg-btn ${calSol()?'active':''}" data-cal-unit="SOL" aria-pressed="${calSol()}">SOL</button></div>
       <div class="cal-nav"><button type="button" class="btn ghost" data-cal-step="-1" aria-label="Bulan sebelumnya">‹</button><strong>${MONTHS[m]} ${y}</strong><button type="button" class="btn ghost" data-cal-step="1" aria-label="Bulan berikutnya">›</button></div>
-      <div class="cal-total"><span class="k">Realized bulan ini</span><strong class="mono ${tot>0?'positive':tot<0?'negative':''}">${esc(signed(+tot.toFixed(4)))}</strong><small>${trades} trade · ${win} hari profit · ${loss} hari rugi</small></div>
+      <div class="cal-total"><span class="k">Realized bulan ini</span><strong class="mono ${tot>0?'positive':tot<0?'negative':''}">${esc(calSol()?calMoney(+tot.toFixed(6)):signed(+tot.toFixed(4)))}</strong><small>${trades} trade · ${win} hari profit · ${loss} hari rugi</small></div>
       <div class="cal-grid cal-head">${['Sen','Sel','Rab','Kam','Jum','Sab','Min'].map(w=>`<div>${w}</div>`).join('')}</div>
       <div class="cal-grid">${cells}</div>
-      <p class="meta cal-foot">Hari = tanggal UTC. Sumber: history realized (semua history termasuk posisi arsip, sama dengan Total PnL). Total semua waktu ${esc(signed(d.total))} · ${d.trades} trade. Mode ${esc(mo.label)}${mo.live?'':' — simulasi paper, bukan uang sungguhan'}.</p><p class="meta cal-foot">🕖 Reset harian: <b>07:00 WIB</b> = <b>00:00 UTC</b></p>`;
+      <p class="meta cal-foot">Hari = tanggal UTC. Sumber: history realized (semua history termasuk posisi arsip, sama dengan Total PnL). Total semua waktu ${esc(calSol()?calMoney(d.totalSol??0):signed(d.total))} · ${d.trades} trade. Mode ${esc(mo.label)}${mo.live?'':' — simulasi paper, bukan uang sungguhan'}.</p><p class="meta cal-foot">🕖 Reset harian: <b>07:00 WIB</b> = <b>00:00 UTC</b></p>`;
   }
   async function loadCal(){if(cal.busy)return;cal.busy=true;try{const r=await api('GET','/api/pnl-calendar');if(r.status===200&&r.json.ok){cal.data=r.json;}else if(!cal.data){$('pnlcal').innerHTML='<div class="empty">Gagal memuat PnL calendar ('+esc(r.json.reason||r.json.error||r.status)+').</div>';cal.busy=false;return;}}catch(e){}cal.busy=false;renderCal();}
   function calDayTitle(k){
@@ -622,18 +654,19 @@
       showSheet(modal);
       return;
     }
-    const profit=day.profit,minus=day.minus,net=day.pnl,wins=day.wins||0,losses=day.losses||0;
+    const S=calSol(),profit=S?(day.profitSol??0):day.profit,minus=S?(day.minusSol??0):day.minus,net=S?(day.pnlSol??0):day.pnl,wins=day.wins||0,losses=day.losses||0;
     const tokens=Array.isArray(day.tokens)?day.tokens:[];
-    const tokHtml=tokens.length?`<div class="cal-day-sec"><div class="k">Per token</div>${tokens.map(t=>`<div class="cal-tok"><span class="cal-tok-name">${esc(t.name)}</span><span class="cal-tok-n">${t.trades} trade</span><strong class="mono ${calTone(t.pnl)}">${esc(signed(t.pnl))}</strong></div>`).join('')}</div>`:'';
-    const listHtml=`<div class="cal-day-sec"><div class="k">Trade</div>${rows.map(r=>`<div class="cal-day-row"><div><strong>${esc(r.name)}</strong><small>${esc(calTimeWib(r.closedAt))}</small></div><strong class="mono ${calTone(r.pnlUsd)}">${esc(signedWithPct(r.pnlUsd,r.capital))}</strong></div>`).join('')}</div>`;
+    const tokHtml=tokens.length?`<div class="cal-day-sec"><div class="k">Per token</div>${tokens.map(t=>`<div class="cal-tok"><span class="cal-tok-name">${esc(t.name)}</span><span class="cal-tok-n">${t.trades} trade</span><strong class="mono ${calTone(S?t.pnlSol:t.pnl)}">${esc(calFmt(S?t.pnlSol:t.pnl))}</strong></div>`).join('')}</div>`:'';
+    const listHtml=`<div class="cal-day-sec"><div class="k">Trade</div>${rows.map(r=>`<div class="cal-day-row"><div><strong>${esc(r.name)}</strong><small>${esc(calTimeWib(r.closedAt))}</small></div><strong class="mono ${calTone(S?r.pnlSol:r.pnlUsd)}">${esc(S?calMoney(r.pnlSol??0):signedWithPct(r.pnlUsd,r.capital))}</strong></div>`).join('')}</div>`;
     body.innerHTML=`<div class="cal-day-sums">
-      <div class="cal-day-sum"><span class="k">Total profit</span><strong class="mono ${calTone(profit)}">${esc(signed(profit))}</strong><small>${wins} trade</small></div>
-      <div class="cal-day-sum"><span class="k">Total minus</span><strong class="mono ${calTone(minus)}">${esc(signed(minus))}</strong><small>${losses} trade</small></div>
-      <div class="cal-day-sum net"><span class="k">Netto</span><strong class="mono ${calTone(net)}">${esc(signed(net))}</strong><small>${day.trades} trade · sama dengan sel kalender</small></div>
+      <div class="cal-day-sum"><span class="k">Total profit</span><strong class="mono ${calTone(profit)}">${esc(calFmt(profit))}</strong><small>${wins} trade</small></div>
+      <div class="cal-day-sum"><span class="k">Total minus</span><strong class="mono ${calTone(minus)}">${esc(calFmt(minus))}</strong><small>${losses} trade</small></div>
+      <div class="cal-day-sum net"><span class="k">Netto</span><strong class="mono ${calTone(net)}">${esc(calFmt(net))}</strong><small>${day.trades} trade · sama dengan sel kalender</small></div>
     </div>${tokHtml}${listHtml}`;
     showSheet(modal);
   }
   document.addEventListener('click',e=>{
+    const unitBtn=e.target.closest('[data-cal-unit]');if(unitBtn){cal.unit=unitBtn.dataset.calUnit==='SOL'?'SOL':'USD';try{localStorage.setItem('calUnit',cal.unit);}catch(_){}renderCal();return;}
     const dayBtn=e.target.closest('[data-cal-day]');if(dayBtn){openCalDay(dayBtn.dataset.calDay);return;}
     const s=e.target.closest('[data-cal-step]');if(s&&cal.ym){let [y,m]=cal.ym;m+=+s.dataset.calStep;if(m<0){m=11;y--;}if(m>11){m=0;y++;}cal.ym=[y,m];renderCal();return;}
     const w=e.target.closest('[data-wallet-view]');if(!w)return;const v=w.dataset.walletView;
@@ -655,7 +688,7 @@
   $('settings-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     for(const k of ratioKeys){const h=document.getElementById('f-'+k);if(h&&h.value===''){showBanner(ratioLabels[k]+' tidak valid: isi angka bulat 0–100 dan jumlah harus 100 (mis. 25:75).',true);return;}}
-    const patch=collectDisplay(),switching=patch.CAPITAL_ASSET!==(state.fields?.CAPITAL_ASSET?.value||'USDC');
+    const patch=collectDisplay(),switching=patch.CAPITAL_ASSET!==undefined&&patch.CAPITAL_ASSET!==(state.fields?.CAPITAL_ASSET?.value||'USDC');
     if(switching&&!await askConfirm('Ganti aset modal ke '+patch.CAPITAL_ASSET+'? Saldo bebas dikonversi pada quote/estimasi saat bot memproses, biaya swap berlaku. Hanya posisi BARU memakai basis/aturan exit aset ini; posisi lama tetap basis lama.'))return;
     const trailTurningOn=patch.TRAIL_ENABLED===true&&state.fields?.TRAIL_ENABLED?.value!==true;
     if(trailTurningOn&&!await trailWarning()){showBanner('Trailing stop tetap OFF. Tidak ada yang disimpan.',true);return;}
@@ -710,6 +743,29 @@
     showBanner('Key tersimpan. Address: ' + (json.publicAddress || ''));
     await refresh();
   });
+
+  // ---- Claim Token Account (cek dulu -> konfirmasi -> claim; bisa kapan saja, mint posisi live yang terbuka dijaga server)
+  const rentState = { count: 0, sol: 0 };
+  function rentShow(text, err) { const el = $('rent-result'); if (el) { el.textContent = text; el.classList.toggle('negative', !!err); } }
+  const rentSol = (n) => (+n || 0).toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 });
+  $('btn-rent-scan').onclick = async () => {
+    rentShow('Memeriksa…'); $('btn-rent-claim').classList.add('hidden');
+    const r = await api('GET', '/api/wallet/rent'); const j = r.json || {};
+    if (r.status !== 200 || !j.ok) { rentShow('Cek gagal: ' + (j.error || j.reason || r.status), true); return; }
+    rentState.count = j.count || 0; rentState.sol = j.totalSol || 0;
+    if (!rentState.count) { rentShow('Tidak ada token account kosong yang bisa ditutup (dari ' + (j.total || 0) + ' akun' + (j.skipped && j.skipped['protected-open-position'] ? ', ' + j.skipped['protected-open-position'] + ' dijaga karena posisi live masih terbuka' : '') + ').'); return; }
+    rentShow(rentState.count + ' akun kosong, rent yang bisa diklaim ≈ ' + rentSol(rentState.sol) + ' SOL' + '.');
+    $('btn-rent-claim').classList.remove('hidden');
+  };
+  $('btn-rent-claim').onclick = async () => {
+    if (!window.confirm('Tutup ' + rentState.count + ' token account kosong dan kembalikan ≈ ' + rentSol(rentState.sol) + ' SOL ke wallet ini?\n\nHanya akun saldo 0 milik wallet ini. Transaksi disimulasikan dulu; jika ada error, tidak ada yang dikirim.')) return;
+    const phrase = window.prompt('Ketik CLAIM untuk mengonfirmasi'); if (phrase !== 'CLAIM') { rentShow('Dibatalkan.'); return; }
+    $('btn-rent-claim').classList.add('hidden'); rentShow('Mengklaim…');
+    const r = await api('POST', '/api/wallet/rent/claim', { confirm: 'CLAIM' }); const j = r.json || {};
+    if (r.status !== 200 || !j.ok) { rentShow('Klaim gagal: ' + (j.error || j.reason || r.status) + (j.closed ? ' (sudah tertutup ' + j.closed + ' akun)' : '') + (j.detail ? ' — ' + j.detail : ''), true); showBanner('Claim Token Account gagal: ' + (j.error || r.status), true); return; }
+    rentShow('Selesai: ' + (j.closed || 0) + ' akun ditutup, ≈ ' + rentSol(j.reclaimedSol) + ' SOL kembali.' + (j.remaining ? ' Sisa ' + j.remaining + ' akun, cek lagi lalu klaim.' : ''));
+    showBanner('Claim Token Account berhasil: ' + rentSol(j.reclaimedSol) + ' SOL'); await refresh();
+  };
 
   $('btn-del-key').onclick = async () => {
     if (!window.confirm('Hapus key dari penyimpanan terenkripsi?')) return;
