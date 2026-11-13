@@ -455,7 +455,7 @@ function setChatMenuButton(url, chatId = TUAN_TG_ID) {
 
 function setMyCommands() {
   return postApi('setMyCommands', {
-    commands: [{ command: 'start', description: 'Buka mini app Sol Warlock v1.7' }],
+    commands: [{ command: 'start', description: 'Buka mini app Sol Warlock v1.8' }],
   });
 }
 
@@ -480,7 +480,7 @@ function replyStart(fromId, chatId) {
   if (!url) {
     return send('Tuan, mini app belum punya URL publik. Coba /start lagi sebentar.', { chat_id: chatId });
   }
-  return send('Tuan, buka mini app Sol Warlock v1.7 di sini (Status, Settings, Wallet, Live).', {
+  return send('Tuan, buka mini app Sol Warlock v1.8 di sini (Status, Settings, Wallet, Live).', {
     chat_id: chatId,
     reply_markup: startKeyboard(url),
     allowWebApp: true,
@@ -679,7 +679,7 @@ function notifyStartup(status = {}) {
   const scan = status.lastScan;
   const rej = scan && scan.rejects ? Object.entries(scan.rejects).map(([k, v]) => `${k} ${v}`).join(', ') : '';
   const lines = [
-    `${PREFIX} Bot LP Sol Warlock v1.7 terhubung`,
+    `${PREFIX} Bot LP Sol Warlock v1.8 terhubung`,
     '',
     'Status dry run:',
     `Window: ${status.startedWib || 'n/a'} → ${status.endsWib || 'n/a'}`,

@@ -120,7 +120,7 @@ function createArmStore({ ttlMs = ARM_TTL_MS } = {}) {
 }
 
 async function defaultGetBalances(address, rpc) {
-  const conn = new Connection(rpc || process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com', 'confirmed');
+  const conn = new Connection(rpc || require('./rpc-config').url(), 'confirmed');
   const pk = new PublicKey(address);
   const solLamports = await conn.getBalance(pk);
   const sol = solLamports / LAMPORTS_PER_SOL;

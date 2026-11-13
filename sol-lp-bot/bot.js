@@ -20,6 +20,9 @@ const telegram = require('./telegram-notify');
 const paperCap = require('./paper-capital');
 const paperSettings = require('./paper-settings');
 const antiPvp = require('./anti-pvp');
+const feeTurnover = require('./fee-turnover');   // skip small overheated pools (24h fees / TVL)
+const jup = require('./jupiter-config');   // optional JUPITER_API_KEY -> api.jup.ag (own rate limit); keyless -> lite-api (shared, many 429)
+const rugSticky = require('./rug-sticky');   // a token flagged rugged/danger/high score stays blocked even if RugCheck later answers clean
 const screenReasons = require('./screen-reasons');
 const tvlDrop = require('./tvl-drop');
 const entryReasons = require('./entry-reasons');
@@ -83,7 +86,7 @@ if (!DRY) { // Tuan rule: live must be identical to dry run (one setting set, sa
 const CFG = {
   PAPER, DRY_RUN: DRY,
   ONCE: process.argv.includes('--once'),
-  RPC: process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
+  RPC: require('./rpc-config').url(),   // custom SOLANA_RPC_URL > HELIUS_API_KEY > public endpoint
   POLL_SEC: +(process.env.POLL_SEC || 300),
   POSITION_SOL: +(process.env.POSITION_SOL || 2),
   POSITION_USD: process.env.POSITION_USD ? +process.env.POSITION_USD : 0,
@@ -97,7 +100,7 @@ const CFG = {
   MIN_AGE_H: +(process.env.MIN_AGE_H || 24),
   MIN_LIQ_USD: +(process.env.MIN_LIQ_USD || 10000),
   MAX_POS_TVL_FRAC: +(process.env.MAX_POS_TVL_FRAC || 0.05),
-  MAX_POSITIONS:5,CAPITAL_ASSET:'USDC',MAX_LIQ_USD:100000,MAX_NONREFUND_SOL:.05,REOPEN_COOLDOWN_MIN:30,MAX_PUMP24H_PCT:200,POSITION_USDC:0,UPPER_BUFFER_BINS:0,OOR_RIGHT_CONFIRM_POLLS:2,OOR_RIGHT_MIN_PROFIT_PCT:.5,OOR_RIGHT_MAX_REPOSITIONS:2,
+  MAX_POSITIONS:5,CAPITAL_ASSET:'USDC',MAX_LIQ_USD:100000,MAX_NONREFUND_SOL:.05,REOPEN_COOLDOWN_MIN:30,MAX_PUMP24H_PCT:200,POSITION_USDC:0,UPPER_BUFFER_BINS:0,OOR_RIGHT_CONFIRM_POLLS:2,OOR_RIGHT_MIN_BINS:5,OOR_RIGHT_REPOSITION_MIN_PNL_PCT:-3,RUGCHECK_STICKY_DAYS:7,FEE_TURNOVER_MAX_PCT:60,FEE_TURNOVER_TVL_BELOW_USD:25000,OOR_RIGHT_MIN_PROFIT_PCT:.5,OOR_RIGHT_MAX_REPOSITIONS:2,
   MIN_BIN_STEP: +(process.env.MIN_BIN_STEP || 100),
   MAX_BIN_STEP: +(process.env.MAX_BIN_STEP || 400),
   MIN_VOL_1H: +(process.env.MIN_VOL_1H || 1000),
@@ -418,6 +421,8 @@ async function performScan(policy,opts={}) {
     if ((p.volume?.['1h'] || 0) < policy.MIN_VOL_1H&&soft(p,'vol1h low'))return false;
     const spike = antirug.evaluateVolSpike(p.volume?.['1h'], p.volume?.['24h'], policy.VOL_SPIKE_1H_OF_24H);
     if (!spike.ok&&soft(p,spike.why))return false;
+    const fto = feeTurnover.evaluate(p, policy);
+    if (!fto.ok&&soft(p,fto.why))return false;
     return true;
   }).sort((a,b)=>screenSource.priority(a,b,policy.CAPITAL_ASSET));
   log(`scan: ${seen.size} pools fetched, ${c.length} pass basic filters; rejects=${JSON.stringify(rej)}`);
@@ -438,6 +443,8 @@ async function performScan(policy,opts={}) {
   const picks = [];
   const diag = new Map(), D = (p) => { let x = diag.get(p.address); if (!x) diag.set(p.address, x = {}); return x; }; // display-only records, never read by the decision
   const skip = (tag, why) => { bump(why); log(`  skip ${tag}: ${why}`); };
+  // Manual pick with the confirmed override: filter-type rejections become warnings (returns false = keep going). Safety rejections (TVL min/max, quote, RugCheck, mint authority, insiders, holders) stay hard and never use this.
+  const skipSoft = (p, tag, why) => { if (opts.targetAddress === p.address && opts.allowOverride) { manualWarnings.push(why); return false; } skip(tag, why); return true; };
   const ff = antiPvp.filterFlags(policy, { RUGCHECK: true, CHECK_TOP_HOLDERS: true }), filtersOn = ff.master;
   const fOn = (k) => ({ PUMP1H_FILTER_ENABLED: ff.pump1h, PUMP24H_FILTER_ENABLED: ff.pump24h, CHECK_INSIDERS: ff.insiders })[k];
   const pvpMode = ff.antiPvp;
@@ -447,18 +454,18 @@ async function performScan(policy,opts={}) {
     screeningPool = p;
     const ageH = (nowS - createdAtSec(p)) / 3600;
     const tag = `${p.name} ${p.address.slice(0, 6)} ft${policy.FT_WINDOW}=${(feeTvl(p) ?? 0).toFixed(2)}% tvl=$${p.tvl.toFixed(0)} age=${ageH.toFixed(1)}h bs=${p.pool_config.bin_step}`;
-    if(policy.SL_BLACKLIST_ENABLED!==false&&slBlacklist.has(PAPER_DIR,p.token_x?.address)){bump('SL blacklist');log(`  skip ${p.name} SL blacklist`);continue;}
-    {const cooldown=entryPolicy.cooldownReason(recentHistory,p.address,policy.REOPEN_COOLDOWN_MIN);if(cooldown){skip(tag,cooldown);continue;}}
-    if (ff.tvlDrop) { const ev = tvlDrop.evaluatePool(p, recentEntries, policy.TVL_DROP_MAX_PCT ?? 45); if (!ev.ok) { skip(tag, ev.why); continue; } }
-    if (ff.oldDump && policy.OLD_TOKEN_MODE === 'BLOCK_ALL') { const ot = antirug.evaluateOldToken(Number(p.created_at) > 0 ? ageH : null, policy.OLD_DUMP_MIN_AGE_H ?? 400); if (!ot.ok) { skip(tag, ot.why); continue; } }
-    {p.entryCostEstimate=await screenEntryCost(p,policy);const why=entryCost.rejection(p.entryCostEstimate,policy.MAX_NONREFUND_SOL??.05);if(why){skip(tag,why);continue;}}
+    if(policy.SL_BLACKLIST_ENABLED!==false&&slBlacklist.has(PAPER_DIR,p.token_x?.address)&&skipSoft(p,p.name,'SL blacklist'))continue;
+    {const cooldown=entryPolicy.cooldownReason(recentHistory,p.address,policy.REOPEN_COOLDOWN_MIN);if(cooldown&&skipSoft(p,tag,cooldown))continue;}
+    if (ff.tvlDrop) { const ev = tvlDrop.evaluatePool(p, recentEntries, policy.TVL_DROP_MAX_PCT ?? 45); if (!ev.ok && skipSoft(p, tag, ev.why)) continue; }
+    if (ff.oldDump && policy.OLD_TOKEN_MODE === 'BLOCK_ALL') { const ot = antirug.evaluateOldToken(Number(p.created_at) > 0 ? ageH : null, policy.OLD_DUMP_MIN_AGE_H ?? 400); if (!ot.ok && skipSoft(p, tag, ot.why)) continue; }
+    {p.entryCostEstimate=await screenEntryCost(p,policy);const why=entryCost.rejection(p.entryCostEstimate,policy.MAX_NONREFUND_SOL??.05);if(why&&skipSoft(p,tag,why))continue;}
     let pvp = null;
     if (pvpMode !== 'OFF') {
       const ds = await dexSearchPairs(p.token_x?.symbol || p.name?.split('-')[0]);
       if (ds.error) log(`  anti PvP ${p.name}: dexscreener gagal (${ds.error}); pakai pool Meteora saja`);
       pvp = antiPvp.evaluate({ self: antiPvp.fromPool(p), entries: [...pvpUniverse, ...ds.pairs.map(antiPvp.fromDexPair)], mode: pvpMode, minLiq: policy.ANTI_PVP_MIN_LIQ_USD ?? 10000 });
       D(p).pvp = pvp;
-      if (!pvp.ok) { skip(tag, pvp.why); continue; }
+      if (!pvp.ok && skipSoft(p, tag, pvp.why)) continue;
     }
     let pu = null;
     if (fOn('PUMP1H_FILTER_ENABLED')) {
@@ -473,21 +480,21 @@ async function performScan(policy,opts={}) {
     try { pu24 = await pump24h(p.address); } catch (e) { skip(tag, `ohlcv24 error ${e.message}`); await sleep(800); continue; }
     D(p).pu24 = pu24;
     const pump24 = antirug.evaluatePump24h(pu24, policy.MAX_PUMP_24H);
-    if(!pump24.ok){skip(tag,pump24.why);continue;}
+    if(!pump24.ok&&skipSoft(p,tag,pump24.why))continue;
     }
     if (ff.oldDump && policy.OLD_TOKEN_MODE !== 'BLOCK_ALL' && ageH > (policy.OLD_DUMP_MIN_AGE_H ?? 400)) {
       if (pu24 == null) { try { pu24 = await pump24h(p.address); } catch (e) { skip(tag, `token tua: ohlcv24 error ${e.message}`); await sleep(800); continue; } D(p).pu24 = pu24; }
       const od = antirug.evaluateOldDump(ageH, pu24, policy.OLD_DUMP_MIN_AGE_H ?? 400, policy.OLD_DUMP_MAX_PUMP24H ?? 0);
-      if (!od.ok) { skip(tag, od.why); continue; }
+      if (!od.ok && skipSoft(p, tag, od.why)) continue;
     }
     const m = await mintOk(p.token_x.address);
     D(p).mint = m;
     if (!m.ok) { skip(tag, m.why); continue; }
-    let report = null;
+    let report = null, rcInfo = null;
     if (policy.RUGCHECK) {
-      report = await fetchRugCheck(p.token_x.address);
-      const rc = antirug.evaluateRugCheck(report, policy);
-      if (!rc.ok) { skip(tag, rc.why); continue; }
+      const rs = await rugSticky.check({ dir: PAPER_DIR, mint: p.token_x.address, days: policy.RUGCHECK_STICKY_DAYS ?? 7, symbol: p.token_x.symbol || p.name, pool: p.address, fetch: fetchRugCheck, evaluate: (r) => antirug.evaluateRugCheck(r, policy), log });
+      report = rs.report; rcInfo = rs.rc;
+      if (!rs.ok) { skip(tag, rs.why); continue; }
     }
     let ins = null;
     if (fOn('CHECK_INSIDERS')) {
@@ -512,7 +519,7 @@ async function performScan(policy,opts={}) {
         top = { frac: ev.top10Frac, devFrac: ev.devFrac };
       }
     }
-    log(`  PASS ${tag} pump1h=${pu == null ? 'off' : (pu * 100).toFixed(1) + '%'} pump24h=${pu24 == null ? 'off' : (pu24 * 100).toFixed(1) + '%'}${ins ? ` insider=${ins.pct == null ? 'n/a' : ins.pct.toFixed(1) + '%'}` : ''}${pvp ? ` antiPvP=${pvp.twins.length ? 'kept(' + pvp.twins.length + ' kembar)' : 'ok'}` : ''}${top.frac != null ? ` top10=${(top.frac * 100).toFixed(1)}%` : ''}${top.devFrac != null ? ` dev=${(top.devFrac * 100).toFixed(1)}%` : ''}`);
+    log(`  PASS ${tag} pump1h=${pu == null ? 'off' : (pu * 100).toFixed(1) + '%'} pump24h=${pu24 == null ? 'off' : (pu24 * 100).toFixed(1) + '%'}${rcInfo ? ' rugScore=' + (rcInfo.scoreNorm ?? 'n/a') : ''}${ins ? ` insider=${ins.pct == null ? 'n/a' : ins.pct.toFixed(1) + '%'}` : ''}${pvp ? ` antiPvP=${pvp.twins.length ? 'kept(' + pvp.twins.length + ' kembar)' : 'ok'}` : ''}${top.frac != null ? ` top10=${(top.frac * 100).toFixed(1)}%` : ''}${top.devFrac != null ? ` dev=${(top.devFrac * 100).toFixed(1)}%` : ''}`);
     picks.push({ ...p, pump1h: pu, pump24h: pu24, top10: top.frac, devHold: top.devFrac, entryInsiderPct: ins ? ins.pct : (report && !report.error ? antirug.evaluateInsiders(report, policy).pct : null) });
     // Check all basic candidates for honest pass/reject UI; auto entry still uses picks.slice(0,1).
   }
@@ -588,7 +595,7 @@ async function performScan(policy,opts={}) {
           if((ffD.pump1h&&pu===undefined)||((ffD.pump24h||(ffD.oldDump&&policy.OLD_TOKEN_MODE!=='BLOCK_ALL'&&(nowS-createdAtSec(p))/3600>(policy.OLD_DUMP_MIN_AGE_H??400)))&&pu24===undefined)){const pr=await diagPair(p.address,()=>diagStats.pair<MAX_NEW&&canFetch()&&(diagStats.pair++,true));if(pr){if(pu===undefined)pu=pr.h1;if(pu24===undefined)pu24=pr.h24;pumpSource='DexScreener';}}
           const list=screenReasons.evaluate(p,{policy,nowS,flags:ffD,sl:mint?slMints[mint]||null:null,cooldown:policy.PAPER?entryPolicy.cooldownReason(recentHistory,p.address,policy.REOPEN_COOLDOWN_MIN):null,
             open:{samePool:openPos.some(x=>x.pool===p.address),caPoolName:(openPos.find(x=>x.mintX===mint&&x.pool!==p.address)||{}).name||null,count:openPos.length,max:policy.MAX_POSITIONS},
-            entryCost:p.entryCostEstimate||undefined,pu,pu24,pumpSource,mint:d.mint,report,pvp,holdersExclude:[p.reserve_x,p.address],
+            entryCost:p.entryCostEstimate||undefined,pu,pu24,pumpSource,mint:d.mint,report,pvp,rugSticky:mint&&policy.RUGCHECK&&(policy.RUGCHECK_STICKY_DAYS??7)>0?rugSticky.get(PAPER_DIR,mint,policy.RUGCHECK_STICKY_DAYS??7):null,holdersExclude:[p.reserve_x,p.address],
             prevTvl:tvlDrop.entryTvl(tvlDrop.previousEntry(recentEntries.concat(openPos),p))});
           diagStats.unchecked+=list.filter(x=>x.s==='unchecked').length;diagReasons.set(p.address,list);diagLatest.set(p.address,{pu,pu24,report});
         }
@@ -1088,7 +1095,7 @@ function applyPaperSettings({ logAlways = false } = {}) {
   CFG.MIN_FT = values.MIN_FT;
   CFG.MIN_LIQ_USD = values.MIN_LIQ_USD;
   CFG.MIN_AGE_H = values.MIN_AGE_H;
-  for(const k of ['NOTIFY_RESHAPE','MAX_POSITIONS','CAPITAL_ASSET','REOPEN_COOLDOWN_MIN','MAX_PUMP24H_PCT','MAX_LIQ_USD','MAX_NONREFUND_SOL','MIN_BIN_STEP','MAX_BIN_STEP','POSITION_USDC','UPPER_BUFFER_BINS','OOR_RIGHT_CONFIRM_POLLS','OOR_RIGHT_MIN_PROFIT_PCT','OOR_RIGHT_MAX_REPOSITIONS'])CFG[k]=values[k];
+  for(const k of ['OOR_RIGHT_REPOSITION_MIN_PNL_PCT','FEE_TURNOVER_MAX_PCT','FEE_TURNOVER_TVL_BELOW_USD','RUGCHECK_STICKY_DAYS','OOR_RIGHT_MIN_BINS','NOTIFY_RESHAPE','MAX_POSITIONS','CAPITAL_ASSET','REOPEN_COOLDOWN_MIN','MAX_PUMP24H_PCT','MAX_LIQ_USD','MAX_NONREFUND_SOL','MIN_BIN_STEP','MAX_BIN_STEP','POSITION_USDC','UPPER_BUFFER_BINS','OOR_RIGHT_CONFIRM_POLLS','OOR_RIGHT_MIN_PROFIT_PCT','OOR_RIGHT_MAX_REPOSITIONS'])CFG[k]=values[k];
   CFG.TP = values.TP;
   for(const k of ['TP_USD_PCT','OOR_RIGHT_CLOSE','TRAIL_ENABLED','TRAIL_ARM_PCT','TRAIL_DROP_PCT','OOR_MAX_MIN','EMERGENCY_TP_ENABLED','EMERGENCY_TP_TRIGGER_RANGE_PCT','EMERGENCY_TP_PCT','EMERGENCY_SLPLUS_ENABLED','EMERGENCY_SLPLUS_ARM_PCT','EMERGENCY_SLPLUS_LOCK_PCT','EMERGENCY_SLPLUS_CONFIRM_POLLS','EMERGENCY_SLPLUS_FLOOR_PCT','EMERGENCY_SLPLUS_FLOOR_POLLS','SL_BLACKLIST_ENABLED','STALE_CLOSE_ENABLED','STALE_EXIT_MODE','STALE_EXIT_PCT']) CFG[k]=values[k];
   CFG.EMERGENCY_DROP = values.EMERGENCY_DROP;
@@ -1593,13 +1600,15 @@ async function buildReshapeTxs(dlmm, pos, plan) {
   return out;
 }
 
-const paperQuoteClient=require('./paper-quote-client').create({fetch:(...args)=>fetch(...args),log});
+const jupGetJSON=jup.wrap(getJSON,m=>log(m));
+const QUOTE_REFRESH_MS=30000;   // a position whose value is far from every exit threshold asks Jupiter at most this often; near a threshold it asks every poll
+const paperQuoteClient=require('./paper-quote-client').create({fetch:(...args)=>fetch(...args),log,apiKey:()=>jup.key(),onKeyRejected:()=>jup.reject(m=>log(m))});
 async function jupiterQuote(inputMint, outputMint, rawAmount, inDec, outDec, slippageBps = 300) {
   const raw = typeof rawAmount === 'bigint' ? rawAmount : BigInt(Math.max(0, Math.floor(Number(rawAmount) || 0)));
   if (raw === 0n) return { ok: true, skipped: 'zero', inUi: 0, outUi: 0, inAmount: '0', outAmount: '0', impact: 0 };
   if(CFG.PAPER)return paperQuoteClient.quote(inputMint,outputMint,raw,inDec,outDec,slippageBps);
   try {
-    const q = await swapRoute.swapQuote({connection:conn,getJSON,inputMint,outputMint,amount:raw,slippageBps});
+    const q = await swapRoute.swapQuote({connection:conn,getJSON:jupGetJSON,inputMint,outputMint,amount:raw,slippageBps});
     const parsed = paperCap.parseQuote(q, inDec, outDec);
     return Object.assign(q, parsed);
   } catch (e) {
@@ -1752,7 +1761,7 @@ function exitQuotePriority(p){
  const c={...CFG,...(p.strategySettings||{})},active=p.lastActiveBin,pct=p.lastLive?.pnlPct??p.lastPnlPctUsdc;
  if((Number.isFinite(pct)&&pct<=-100*(c.EMERGENCY_DROP??.2))||paperExit.staleCheck(p,{pnlPct:pct},{...c,MAX_HOURS:c.MAX_HOURS??12}).close)return 5;
  const tpEff=paperExit.effectiveTp(p,c).pct;
- if(active>p.maxBinId||(Number.isFinite(pct)&&pct>=tpEff))return 4;
+ if((active>p.maxBinId&&((active-p.maxBinId)>=(c.OOR_RIGHT_MIN_BINS??0)||(Number.isFinite(pct)&&pct>=(c.OOR_RIGHT_MIN_PROFIT_PCT??.5))))||(Number.isFinite(pct)&&pct>=tpEff))return 4;   // just above the range and waiting (net below take-profit) is not 'about to exit'
  if(active>=p.maxBinId-1||(Number.isFinite(pct)&&pct>=tpEff-1))return 1;
  return 0;
 }
@@ -1777,11 +1786,12 @@ async function paperCycle(state) {
       pos.quoteMint=pos.quoteMint||SOL;pos.quoteSymbol=paperUsdc.quoteSymbol(pos);pos.quoteDecimals=paperUsdc.isUsdc(pos)?6:9;
       pos.depositQuote=paperUsdc.depositQuote(pos);pos.feesCompoundedQuote=paperUsdc.compoundedQuote(pos);
       let val;
-      if(entryWaiting&&snap.inRange){
+      if((entryWaiting||(pos.lastQuoteAt&&Date.now()-pos.lastQuoteAt<QUOTE_REFRESH_MS))&&snap.inRange){
        val=await paperUsdc.exitQuote({pos,book,snap,quote:async()=>({ok:false,error:'Quote capacity reserved for pending entry; on-chain mark'}),txFee:CFG.TX_FEE_SOL});
        const risk={...CFG,...(pos.strategySettings||{})};
        if(risk.TRAIL_ENABLED||val.pnlPct>=paperExit.effectiveTp(pos,risk).pct-1||val.pnlPct<=-100*(risk.EMERGENCY_DROP??.2)+1||(pos.slPlusArmed&&val.pnlPct<=Number(risk.EMERGENCY_SLPLUS_LOCK_PCT??0.1)+1))val=await paperUsdc.exitQuote({pos,book,snap,quote:jupiterQuote,txFee:CFG.TX_FEE_SOL});
       }else val=await paperUsdc.exitQuote({pos,book,snap,quote:jupiterQuote,txFee:CFG.TX_FEE_SOL});
+      if(val.quoted){pos.lastQuoteAt=Date.now();if(Number.isFinite(val.tokenHaircut))pos.lastTokenHaircut=val.tokenHaircut;}   // calibration for the on-chain-mark fallback
       const policy={...CFG,...(pos.strategySettings||{})},pv={...v,n:policy.RESHAPE_N,reshape:policy.RESHAPE_ENABLED??true,compound:policy.COMPOUND_ENABLED??true}; // emergency derives from val.pnlPct (net USDC), never token-price drop
       let exitReason=paperExit.decide({pos,val,activeBin:snap.active.binId,settings:policy,pollId,stopReason:stop?reasonStop:null});
       if(!exitReason&&pv.reshape&&!stop){
@@ -2002,7 +2012,7 @@ async function liveSwapAllToSol(mintX) {
   if(!q.ok)throw Error('Jupiter token close quote failed: '+q.error);
   log(`  jupiter quote: ${amt} raw token -> ${(+q.outAmount / 1e9).toFixed(5)} SOL, impact=${q.priceImpactPct}`);
   if (CFG.DRY_RUN || CFG.PAPER || process.env.LIVE_CONFIRMED !== '1') return;
-  const s = await getJSON('https://lite-api.jup.ag/swap/v1/swap', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ quoteResponse: q, ...swapRoute.swapBodyParams(q), userPublicKey: wallet.publicKey.toBase58(), wrapAndUnwrapSol: true, dynamicComputeUnitLimit: true, prioritizationFeeLamports: 'auto' }) });
+  const s = await jupGetJSON('https://lite-api.jup.ag/swap/v1/swap', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ quoteResponse: q, ...swapRoute.swapBodyParams(q), userPublicKey: wallet.publicKey.toBase58(), wrapAndUnwrapSol: true, dynamicComputeUnitLimit: true, prioritizationFeeLamports: 'auto' }) });
   const vtx = VersionedTransaction.deserialize(Buffer.from(s.swapTransaction, 'base64')); vtx.sign([wallet]);
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash();
   const sig = await conn.sendRawTransaction(vtx.serialize(), { maxRetries: 5 });
@@ -2150,7 +2160,7 @@ async function jupiterSwapLive(inputMint, outputMint, rawAmount, inDec, outDec, 
   if (CFG.DRY_RUN || CFG.PAPER || process.env.LIVE_CONFIRMED !== '1') {
     return { ok: true, dry: true, inUi: q.inUi, outUi: q.outUi, quote: q };
   }
-  const s = await getJSON('https://lite-api.jup.ag/swap/v1/swap', {
+  const s = await jupGetJSON('https://lite-api.jup.ag/swap/v1/swap', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -2308,7 +2318,7 @@ async function liveCycle(state) {
       log(line);paperSettings.audit(PAPER_DIR,line);
     }
     const startUsdc = (primaryBook(state) && primaryBook(state).virtual && primaryBook(state).virtual.usdc) || CFG.PAPER_USDC;
-    log(`start PAPER: real wallet ${REAL_WALLET || '(belum ada key wallet)'} on-chain=${real == null ? 'n/a' : real.toFixed(5)} SOL (unused). strategy=N5 (reshape every 5 bins, compound on reshape; single book, live-like). capital=${startUsdc} USDC only, GAS_BUFFER_SOL=${CFG.GAS_BUFFER_SOL} (extra SOL bought at each open for rent/tx, leftovers swapped back at close; no separate gas wallet), usdcBuffer=${CFG.USDC_BUFFER}, minLiq=$${CFG.MIN_LIQ_USD}, minAge=${CFG.MIN_AGE_H}h, minFt=${CFG.MIN_FT}%/${CFG.FT_WINDOW}, pump24h<=${CFG.MAX_PUMP_24H * 100}%, emergencyNetUsdcDrop=${CFG.EMERGENCY_DROP * 100}%, rugcheck=${CFG.RUGCHECK}, tvlCap=${CFG.MAX_POS_TVL_FRAC * 100}%, TP_USDC=${CFG.TP_USD_PCT}%, rightOorClose=${CFG.OOR_RIGHT_CLOSE}, trailing=${CFG.TRAIL_ENABLED}, maxHold=${CFG.MAX_HOURS}h, window ${state.meta.startedWib} -> ${state.meta.endsWib}. Private key not loaded. Live STOP file left in place; paper stop is paper/STOP or pm2 stop lp-paper.`);
+    log('Jupiter: '+jup.describe());log('RPC: '+require('./rpc-config').describe());log(`start PAPER: real wallet ${REAL_WALLET || '(belum ada key wallet)'} on-chain=${real == null ? 'n/a' : real.toFixed(5)} SOL (unused). strategy=N5 (reshape every 5 bins, compound on reshape; single book, live-like). capital=${startUsdc} USDC only, GAS_BUFFER_SOL=${CFG.GAS_BUFFER_SOL} (extra SOL bought at each open for rent/tx, leftovers swapped back at close; no separate gas wallet), usdcBuffer=${CFG.USDC_BUFFER}, minLiq=$${CFG.MIN_LIQ_USD}, minAge=${CFG.MIN_AGE_H}h, minFt=${CFG.MIN_FT}%/${CFG.FT_WINDOW}, pump24h<=${CFG.MAX_PUMP_24H * 100}%, emergencyNetUsdcDrop=${CFG.EMERGENCY_DROP * 100}%, rugcheck=${CFG.RUGCHECK}, tvlCap=${CFG.MAX_POS_TVL_FRAC * 100}%, TP_USDC=${CFG.TP_USD_PCT}%, rightOorClose=${CFG.OOR_RIGHT_CLOSE}, trailing=${CFG.TRAIL_ENABLED}, maxHold=${CFG.MAX_HOURS}h, window ${state.meta.startedWib} -> ${state.meta.endsWib}. Private key not loaded. Live STOP file left in place; paper stop is paper/STOP or pm2 stop lp-paper.`);
     log('paper valuation audit applied: bin prices/invariants verified; fallback = on-chain token mark minus SDK swap fee, native SOL conversion estimate 5 bps; Jupiter queue 1500ms + cache/backoff. Approved policy: unavailable OOR quote waits 10 polls; failed reopen retries; emergency is net entry capital asset (USDC/SOL), not token price.');
     saveState(state, F('state.json'));
     writeAllHistory(state);

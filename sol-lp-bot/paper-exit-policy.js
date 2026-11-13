@@ -97,8 +97,12 @@ function decide({pos,val,activeBin,settings,now=Date.now(),pollId=null,stopReaso
  if(settings.OOR_RIGHT_CLOSE!==false&&right&&pos.oorRightPolls>=(settings.OOR_RIGHT_CONFIRM_POLLS??2)){
   if(!Number.isFinite(val.pnlPct))return null;
   if(!val.quoted&&(pos.quoteUnavailablePolls||0)<maxFailures)return null;
+  // Price only just above the top of the range and net below the take-profit level: wait (it may fall back in range and keep earning) instead of burning a reposition / the limit on noise.
+  if(val.pnlPct<(settings.OOR_RIGHT_MIN_PROFIT_PCT??.5)&&(activeBin-pos.maxBinId)<(settings.OOR_RIGHT_MIN_BINS??0))return null;
   if((pos.rightRepositions||0)>=(settings.OOR_RIGHT_MAX_REPOSITIONS??2))return 'oor_right_reposition_limit';
   if(val.pnlPct>=(settings.OOR_RIGHT_MIN_PROFIT_PCT??.5))return val.quoted?'oor_right_take_profit':'oor_right_take_profit_fallback';
+  // Too deep in the red (history: the only two repositions below -3% were Huang's, net -12% / -11%): do not churn the inventory through swaps, hold. Take-profit and the reposition LIMIT above are unaffected; SL / SL+ / stale still apply.
+  if(val.pnlPct<(settings.OOR_RIGHT_REPOSITION_MIN_PNL_PCT??-100))return null;
   return 'oor_right_reposition'; // failed reopen is transactional and retried, never a forced close
  }
  if(tpReady&&etp.emergency&&(val.quoted||(pos.quoteUnavailablePolls||0)>=maxFailures))return 'emergency_tp '+(pos.capitalAsset||'USDC')+' +'+tpPct+'%'+(val.quoted?'':' (on-chain fallback)');

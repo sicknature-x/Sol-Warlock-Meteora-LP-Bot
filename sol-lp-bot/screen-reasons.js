@@ -74,6 +74,8 @@ function evaluate(p, ctx) {
     if (P.RUGCHECK) todo('rugcheck', 'RugCheck'); if (P.CHECK_TOP_HOLDERS) todo('holders', 'Top holder/dev'); if (F.insiders) todo('insider', 'Insider/cluster');
   } else if (needReport && rep && rep.error) {
     fail('rugcheck', `RugCheck gagal: ${rep.error}`);
+  } else if (ctx.rugSticky && P.RUGCHECK) {
+    fail('rugcheck', `RugCheck sticky: ${ctx.rugSticky.reason || 'pernah ditandai bahaya'} (ditandai ${String(ctx.rugSticky.flaggedAt || '').slice(0, 16).replace('T', ' ')} UTC)`);
   } else if (rep) {
     if (P.RUGCHECK) {
       if (rep.rugged === true) fail('rugcheck', 'RugCheck: rugged');

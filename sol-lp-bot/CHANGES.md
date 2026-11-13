@@ -1,5 +1,18 @@
 # Changes
 
+## v1.8 (2026-11-13)
+
+- **Filter baru (dry run dan live sama):** RugCheck lengket (`RUGCHECK_STICKY_DAYS`, default 7 hari: token yang pernah ditandai bahaya tetap diblok walau laporan berikutnya bersih), pengaman fee turnover (`FEE_TURNOVER_MAX_PCT` 60% untuk TVL di bawah `FEE_TURNOVER_TVL_BELOW_USD` 25000), dan `OOR_RIGHT_MIN_BINS` (reposition/limit OOR kanan baru jalan setelah harga naik N bin di atas range, default 5).
+- **Reposition floor:** `OOR_RIGHT_REPOSITION_MIN_PNL_PCT` (default -3%): posisi yang net PnL-nya lebih dalam dari itu ditahan, tidak di-reposition. Take-profit, batas reposition, SL, dan stale tetap berlaku.
+- **Anti PvP `KEEP_BIGGEST`:** yang terbesar likuiditasnya menang, bukan yang tertua.
+- **Jupiter API key dan Helius RPC:** isi `JUPITER_API_KEY` dan `HELIUS_API_KEY` di `.env` (nama saja di `.env.example`). Kuota quote lebih longgar, refresh quote 30 detik, fallback otomatis ke endpoint tanpa key kalau key ditolak. Prioritas RPC: `SOLANA_RPC_URL` > Helius > RPC publik.
+- **Menu Wallet:** tombol **Claim Token Account** (klaim rent SOL dari token account kosong; hanya akun saldo 0 milik wallet sendiri, USDC/wSOL dan token dari posisi yang masih terbuka dilewati, semua transaksi disimulasikan dulu, wajib konfirmasi dan ketik `CLAIM`, tidak pernah otomatis).
+- **Menu Live:** pilihan modal **USDC / SOL** dipindah ke sini (satu setelan bersama dry run dan live); Settings tidak lagi memuatnya.
+- **Screening:** tombol **Open sekarang** aktif untuk semua kandidat; filter biasa bisa di-override dengan konfirmasi (TVL, quote, RugCheck, mint, insider, holder tetap wajib).
+- **Opsi SOL:** Tambah modal dan Edit modal dry run bisa diisi dalam SOL (dikonversi ke USDC pada harga SOL), dan PnL Calendar punya toggle USD / SOL.
+- **UI:** tombol di Posisi open, Screening, dan modal dibuat lebih besar dan jelas; strip pilihan strategi dihapus (strategi hanya satu).
+- **Tes:** tes lama diperbarui ke default sekarang, ditambah tes untuk semua fitur baru. Tiga tes UI/integrasi lama masih usang dan perlu ditulis ulang.
+
 ## v1.7 (2026-11-12)
 
 - **Live = dry run, satu aturan:** screening, pengaman open, keputusan close, reshape + compound tiap N bin, reposition kanan, swap back (token langsung ke USDC), pool berkuote USDC, dan multi-posisi sampai `MAX_POSITIONS` kini memakai kode dan setting yang sama di dry run dan live. Pengecek paritas (`parity-check.js`) menolak Go Live selama masih ada perbedaan atau tes dana kecil yang belum dicatat (`record-live-verification.js`, dijalankan Tuan sendiri).
@@ -8,6 +21,7 @@
 - **Menu Live disederhanakan:** satu tombol **Live ON** dengan satu konfirmasi; tanpa key atau saldo live menolak setelah konfirmasi dan dry run tetap jalan. Saat Live ON berhasil, dry run disimpan sebagai run bernomor dan run berikutnya mulai bersih. Istilah "STOP file" dihapus dari tampilan.
 - **History:** modal USDC menampilkan **net USDC** sebagai angka utama (warna mengikuti angka itu); modal SOL tidak berubah.
 - **Telegram:** emoji di pesan open, reposition, close (profit/rugi), dan emergency; pesan reshape diam secara default (`NOTIFY_RESHAPE`); prefix `[LIVE]` untuk proses live.
+- **Fee swap dijelaskan terbuka:** swap on-chain lewat Jupiter (live) memuat fee platform 0,5% ke akun referral developer; tertulis di README. Dry run tidak terkena fee.
 - **Tanpa alamat pribadi di kode:** alamat wallet tidak lagi tertulis di source, README, atau config; tombol LP Agent memakai alamat wallet bot yang tersimpan di mini app.
 
 ## v1.6 (2026-11-12)

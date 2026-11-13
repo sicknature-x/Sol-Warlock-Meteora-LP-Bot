@@ -30,25 +30,30 @@ async function exitQuote({pos,book,snap,quote,txFee=.000025}){
  // deducted. Native SOL conversion uses a separate low stable-route fee estimate.
  const tokenFeeRate=Math.max(0,Math.min(.99,snap.estimatedTokenSwapFeeRate??((pos.baseFeePct??.3)/100)));
  const solFeeRate=Math.max(0,Math.min(.99,snap.estimatedSolSwapFeeRate??.0005));
+ // When Jupiter has no answer, value the token with the haircut seen on the LAST real quote (recent only) instead of the generic pool-fee guess (which was 1-3 points too pessimistic).
+ const calib=(Number.isFinite(pos.lastTokenHaircut)&&Date.now()-Number(pos.lastQuoteAt||0)<30*60000)?Math.max(tokenFeeRate*.25,Math.min(.5,pos.lastTokenHaircut)):null;
+ const tokenFallbackRate=calib??tokenFeeRate;
+ const SOL_PILE_QUOTE_MIN_USD=30;   // a pile of a few SOL-cents is not worth a Jupiter call: estimated with the stable-route fee
  const errors=[];
  const get=async(mint,amount,dec,mark,feeRate)=>{
   if(!(amount>0))return {out:0,quoted:true,cost:0};
   const raw=BigInt(Math.max(0,Math.floor(amount*10**dec)));
   if(raw===0n)return {out:0,quoted:true,cost:mark};
   const q=await quote(mint,USDC,raw,dec,6);
-  if(q.ok&&Number.isFinite(q.outUi)&&q.outUi>=0)return {out:q.outUi,quoted:true,cost:Math.max(0,mark-q.outUi)};
+  if(q.ok&&Number.isFinite(q.outUi)&&q.outUi>=0)return {out:q.outUi,quoted:true,cost:Math.max(0,mark-q.outUi),haircut:mark>0?Math.max(0,(mark-q.outUi)/mark):null};
   errors.push(q.error||'Jupiter route unavailable');
   return {out:mark*(1-feeRate),quoted:false,cost:mark*feeRate};
  };
- const tokenUsd=await get(pos.mintX,token,pos.decX,token*snap.price*unit,tokenFeeRate);
- const solUsd=await get(SOL,Math.max(0,solPile),9,Math.max(0,solPile)*px,solFeeRate);
+ const tokenUsd=await get(pos.mintX,token,pos.decX,token*snap.price*unit,tokenFallbackRate);
+ const solMark=Math.max(0,solPile)*px;
+ const solUsd=solMark<SOL_PILE_QUOTE_MIN_USD?{out:solMark*(1-solFeeRate),quoted:true,cost:solMark*solFeeRate,estimated:true}:await get(SOL,Math.max(0,solPile),9,solMark,solFeeRate);
  const stable=isUsdc(pos)?quoteAmount:0;
  const usdcOut=stable+tokenUsd.out+solUsd.out;
  const pnlUsd=usdcOut-pos.usdcIn+(pos.realizedPnlCarryUsd||0),basis=pos.initialUsdcIn||pos.usdcIn,pnlPct=basis>0?100*pnlUsd/basis:0;
  return {usdcOut,pnlUsd,pnlPct,positionValueUsd:quoteAmount*unit+token*snap.price*unit,
   x,y,tokenAmount:token,quoteAmount,solPile,closeFees,rentBack:refund,
   tokenSwapCostUsd:tokenUsd.cost,solSwapCostUsd:solUsd.cost,
-  estimatedTokenSwapFeeRate:tokenFeeRate,estimatedSolSwapFeeRate:solFeeRate,
+  estimatedTokenSwapFeeRate:tokenFeeRate,estimatedSolSwapFeeRate:solFeeRate,tokenFallbackRate,tokenHaircut:tokenUsd.quoted?(tokenUsd.haircut??null):null,solPileEstimated:!!solUsd.estimated,
   quoted:tokenUsd.quoted&&solUsd.quoted,quoteErrors:errors,
   valuationBasis:errors.length?'on-chain mark minus estimated swap fees (not eligible for TP)':'Jupiter close-to-USDC quote',at:new Date().toISOString()};
 }

@@ -1,7 +1,7 @@
 'use strict';
 const {parseQuote}=require('./paper-capital');
 // One paper-only public quote queue. Never signs, submits a swap, or accesses a key.
-function create({fetch:request=globalThis.fetch,now=()=>Date.now(),wait=ms=>new Promise(r=>setTimeout(r,ms)),minGapMs=1500,cacheMs=15000,baseBackoffMs=30000,log=()=>{}}={}){
+function create({fetch:request=globalThis.fetch,now=()=>Date.now(),wait=ms=>new Promise(r=>setTimeout(r,ms)),minGapMs=1500,cacheMs=15000,baseBackoffMs=30000,log=()=>{},apiKey=()=>'',onKeyRejected=()=>{}}={}){
  let chain=Promise.resolve(),lastStart=-Infinity,blockedUntil=0,failures=0;const cache=new Map();
  function resultError(message){return {ok:false,error:message,inUi:0,outUi:0};}
  async function perform(inputMint,outputMint,raw,inDec,outDec,slippageBps){
@@ -12,8 +12,10 @@ function create({fetch:request=globalThis.fetch,now=()=>Date.now(),wait=ms=>new 
   if(now()<blockedUntil)return resultError('Jupiter cooldown; using on-chain mark');
   lastStart=now();
   try{
-   const url=`https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${raw}&slippageBps=${slippageBps}`;
-   const r=await request(url,{signal:AbortSignal.timeout(15000)});
+   const qs=`/swap/v1/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${raw}&slippageBps=${slippageBps}`;
+   const call=k=>request((k?'https://api.jup.ag':'https://lite-api.jup.ag')+qs,k?{signal:AbortSignal.timeout(15000),headers:{'x-api-key':k}}:{signal:AbortSignal.timeout(15000)});
+   let k=apiKey(),r=await call(k);
+   if(k&&(r.status===401||r.status===403)){onKeyRejected();k='';r=await call('');}   // rejected key: fall back to the keyless host once
    if(r.status===429){
     failures++;const header=r.headers?.get?.('retry-after');let retry=Number(header)*1000;
     if(header&&!Number.isFinite(retry))retry=Math.max(0,Date.parse(header)-now());

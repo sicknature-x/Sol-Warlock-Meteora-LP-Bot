@@ -32,6 +32,7 @@ const policyFor = (pos, CFG) => ({ ...CFG, ...(pos.strategySettings || {}) });  
 // Mutates `pos` exactly like the dry run does (peak, deep drawdown, SL+ state, poll counters) so the caller must persist it.
 async function decideLiveExit({ pos, v, pxUsd, quote, txFee, CFG, pollId, stopReason = null }) {
   const val = await liveVal({ pos, v, pxUsd, quote, txFee });
+  if (val.quoted) { pos.lastQuoteAt = Date.now(); if (Number.isFinite(val.tokenHaircut)) pos.lastTokenHaircut = val.tokenHaircut; }   // same calibration data the dry run keeps
   const reason = paperExit.decide({ pos, val, activeBin: v.activeBinId, settings: policyFor(pos, CFG), pollId, stopReason });
   return { reason, val };
 }
